@@ -131,12 +131,11 @@ def blockwise(
             "Repeated elements not allowed in output index",
             [k for k, v in toolz.frequencies(out_ind).items() if v > 1],
         )
-    new = (
+    if new := (
         set(out_ind)
         - {a for arg in args[1::2] if arg is not None for a in arg}
         - set(new_axes or ())
-    )
-    if new:
+    ):
         raise ValueError("Unknown dimension", new)
 
     from .core import Array, unify_chunks, normalize_arg

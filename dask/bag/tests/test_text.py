@@ -41,9 +41,9 @@ def test_read_text(fmt, bs, encoding):
     if fmt == "zip" and PY_VERSION < "3.6":
         pytest.skip("zipfile is read-only on py35")
     if fmt not in utils.compress:
-        pytest.skip("compress function not provided for %s" % fmt)
+        pytest.skip(f"compress function not provided for {fmt}")
     compress = utils.compress[fmt]
-    files2 = dict((k, compress(v.encode(encoding))) for k, v in files.items())
+    files2 = {k: compress(v.encode(encoding)) for k, v in files.items()}
     with filetexts(files2, mode="b"):
         b = read_text(
             ".test.accounts.*.json", compression=fmt, blocksize=bs, encoding=encoding

@@ -64,9 +64,7 @@ def optimize(
         )
     else:
         dsk4 = dsk3
-    dsk5 = optimize_slices(dsk4)
-
-    return dsk5
+    return optimize_slices(dsk4)
 
 
 def hold_keys(dsk, dependencies):
@@ -119,7 +117,7 @@ def optimize_slices(dsk):
     fancy_ind_types = (list, np.ndarray)
     dsk = dsk.copy()
     for k, v in dsk.items():
-        if type(v) is tuple and v[0] in GETTERS and len(v) in (3, 5):
+        if type(v) is tuple and v[0] in GETTERS and len(v) in {3, 5}:
             if len(v) == 3:
                 get, a, a_index = v
                 # getter defaults to asarray=True, getitem is semantically False
@@ -127,7 +125,7 @@ def optimize_slices(dsk):
                 a_lock = None
             else:
                 get, a, a_index, a_asarray, a_lock = v
-            while type(a) is tuple and a[0] in GETTERS and len(a) in (3, 5):
+            while type(a) is tuple and a[0] in GETTERS and len(a) in {3, 5}:
                 if len(a) == 3:
                     f2, b, b_index = a
                     b_asarray = f2 is not getitem
@@ -271,15 +269,9 @@ def fuse_slice(a, b):
 
     if isinstance(a, slice) and isinstance(b, slice):
         start = a.start + a.step * b.start
-        if b.stop is not None:
-            stop = a.start + a.step * b.stop
-        else:
-            stop = None
+        stop = a.start + a.step * b.stop if b.stop is not None else None
         if a.stop is not None:
-            if stop is not None:
-                stop = min(a.stop, stop)
-            else:
-                stop = a.stop
+            stop = min(a.stop, stop) if stop is not None else a.stop
         step = a.step * b.step
         if step == 1:
             step = None
@@ -308,7 +300,7 @@ def fuse_slice(a, b):
             check_for_nonfusible_fancy_indexing(b, a)
 
         j = 0
-        result = list()
+        result = []
         for i in range(len(a)):
             #  axis ceased to exist  or we're out of b
             if isinstance(a[i], Integral) or j == len(b):

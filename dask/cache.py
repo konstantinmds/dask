@@ -40,10 +40,10 @@ class Cache(Callback):
         else:
             assert not args and not kwargs
         self.cache = cache
-        self.starttimes = dict()
+        self.starttimes = {}
 
     def _start(self, dsk):
-        self.durations = dict()
+        self.durations = {}
         overlap = set(dsk) & set(self.cache.data)
         for key in overlap:
             dsk[key] = self.cache.data[key]
@@ -53,8 +53,7 @@ class Cache(Callback):
 
     def _posttask(self, key, value, dsk, state, id):
         duration = default_timer() - self.starttimes[key]
-        deps = state["dependencies"][key]
-        if deps:
+        if deps := state["dependencies"][key]:
             duration += max(self.durations.get(k, 0) for k in deps)
         self.durations[key] = duration
         nb = self._nbytes(value) + overhead + sys.getsizeof(key) * 4

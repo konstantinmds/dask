@@ -40,7 +40,7 @@ def cull(dsk, keys):
         keys = [keys]
     out_keys = []
     seen = set()
-    dependencies = dict()
+    dependencies = {}
 
     work = list(set(flatten(keys)))
     while work:
@@ -50,7 +50,7 @@ def cull(dsk, keys):
             (k, get_dependencies(dsk, k, as_list=True))  # fuse needs lists
             for k in work
         ]
-        dependencies.update(deps)
+        dependencies |= deps
         for _, deplist in deps:
             for d in deplist:
                 if d not in seen:
@@ -135,12 +135,15 @@ def fuse_linear(dsk, keys=None, dependencies=None, rename_keys=True):
         deps = dependencies[parent]
         has_many_children = len(deps) > 1
         for child in deps:
-            if keys is not None and child in keys:
+            if (
+                keys is not None
+                and child in keys
+                or child not in child2parent
+                and has_many_children
+            ):
                 unfusible.add(child)
             elif child in child2parent:
                 del child2parent[child]
-                unfusible.add(child)
-            elif has_many_children:
                 unfusible.add(child)
             elif child not in unfusible:
                 child2parent[child] = parent
@@ -264,16 +267,13 @@ def inline(dsk, keys=None, inline_constants=True, dependencies=None):
     # Keys may depend on other keys, so determine replace order with toposort.
     # The values stored in `keysubs` do not include other keys.
     replaceorder = toposort(
-        dict((k, dsk[k]) for k in keys if k in dsk), dependencies=dependencies
+        {k: dsk[k] for k in keys if k in dsk}, dependencies=dependencies
     )
     keysubs = {}
     for key in replaceorder:
         val = dsk[key]
         for dep in keys & dependencies[key]:
-            if dep in keysubs:
-                replace = keysubs[dep]
-            else:
-                replace = dsk[dep]
+            replace = keysubs.get(dep, dsk[dep])
             val = subs(val, dep, replace)
         keysubs[key] = val
 
@@ -406,7 +406,7 @@ def fuse_selections(dsk, head1, head2, merge):
     >>> cull(dsk2, 'y')[0]
     {'y': (<function load at ...>, 'store', 'part', 'a')}
     """
-    dsk2 = dict()
+    dsk2 = {}
     for k, v in dsk.items():
         try:
             if (

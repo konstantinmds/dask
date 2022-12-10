@@ -169,10 +169,9 @@ def test_slice_1d():
     result = _slice_1d(104, [20, 23, 27, 13, 21], slice(100, 27, -3))
     assert expected == result
 
-    # x=range(1000000000000)
-    # x[1000:]
-    expected = {0: slice(1000, 1000000000, 1)}
-    expected.update({ii: slice(None, None, None) for ii in range(1, 1000)})
+    expected = {0: slice(1000, 1000000000, 1)} | {
+        ii: slice(None, None, None) for ii in range(1, 1000)
+    }
     # This array is large
     result = _slice_1d(1000000000000, [1000000000] * 1000, slice(1000, None, None))
     assert expected == result
@@ -350,14 +349,22 @@ def test_take_sorted():
 
     chunks, dsk = take("y", "x", [(20, 20, 20, 20), (20, 20)], [1, 3, 5, 37], axis=1)
     expected = merge(
-        dict(
-            (("y", i, 0), (getitem, ("x", i, 0), (slice(None, None, None), [1, 3, 5])))
+        {
+            ("y", i, 0): (
+                getitem,
+                ("x", i, 0),
+                (slice(None, None, None), [1, 3, 5]),
+            )
             for i in range(4)
-        ),
-        dict(
-            (("y", i, 1), (getitem, ("x", i, 1), (slice(None, None, None), [17])))
+        },
+        {
+            ("y", i, 1): (
+                getitem,
+                ("x", i, 1),
+                (slice(None, None, None), [17]),
+            )
             for i in range(4)
-        ),
+        },
     )
     np.testing.assert_equal(dsk, expected)
     assert chunks == ((20, 20, 20, 20), (3, 1))
@@ -414,12 +421,12 @@ def test_slicing_identities():
     assert a is a[:]
     assert a is a[::]
     assert a is a[...]
-    assert a is a[0:]
-    assert a is a[0::]
+    assert a is a[:]
+    assert a is a[:]
     assert a is a[::1]
-    assert a is a[0 : len(a)]
-    assert a is a[0::1]
-    assert a is a[0 : len(a) : 1]
+    assert a is a[:]
+    assert a is a[::1]
+    assert a is a[::1]
 
 
 def test_slice_stop_0():
@@ -552,10 +559,10 @@ def test_slicing_consistent_names():
 
 def test_slicing_consistent_names_after_normalization():
     x = da.zeros(10, chunks=(5,))
-    assert same_keys(x[0:], x[:10])
-    assert same_keys(x[0:], x[0:10])
-    assert same_keys(x[0:], x[0:10:1])
-    assert same_keys(x[:], x[0:10:1])
+    assert same_keys(x[:], x[:10])
+    assert same_keys(x[:], x[:10])
+    assert same_keys(x[:], x[:10:1])
+    assert same_keys(x[:], x[:10:1])
 
 
 def test_sanitize_index_element():

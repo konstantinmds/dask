@@ -151,10 +151,7 @@ def power_divergence(f_obs, f_exp=None, ddof=0, axis=0, lambda_=None):
     elif lambda_ is None:
         lambda_ = 1
 
-    if f_exp is not None:
-        # f_exp = np.atleast_1d(np.asanyarray(f_exp))
-        pass
-    else:
+    if f_exp is None:
         f_exp = f_obs.mean(axis=axis, keepdims=True)
 
     # `terms` is the array of terms that are summed along `axis` to create
@@ -201,11 +198,6 @@ def skew(a, axis=0, bias=True, nan_policy="propagate"):
     if not bias:
         # Need a version of np.place
         raise NotImplementedError("bias=False is not implemented.")
-
-    if vals.ndim == 0:
-        return vals
-        # TODO: scalar
-        # return vals.item()
 
     return vals
 
@@ -261,10 +253,7 @@ def kurtosis(a, axis=0, fisher=True, bias=True, nan_policy="propagate"):
         # need a version of np.place
         raise NotImplementedError("bias=False is not implemented.")
 
-    if fisher:
-        return vals - 3
-    else:
-        return vals
+    return vals - 3 if fisher else vals
         # TODO: scalar; vals = vals.item()  # array scalar
 
 
@@ -285,9 +274,9 @@ def kurtosistest(a, axis=0, nan_policy="propagate"):
     x = (b2 - E) / np.sqrt(varb2)  # [1]_ Eq. 4
     # [1]_ Eq. 2:
     sqrtbeta1 = (
-        6.0
-        * (n * n - 5 * n + 2)
-        / ((n + 7) * (n + 9))
+        (6.0 * (n**2 - 5 * n + 2))
+        / (n + 7)
+        * (n + 9)
         * np.sqrt((6.0 * (n + 3) * (n + 5)) / (n * (n - 2) * (n - 3)))
     )
     # [1]_ Eq. 3:
@@ -334,10 +323,7 @@ def f_oneway(*args):
     alldata -= offset
 
     sstot = _sum_of_squares(alldata) - (_square_of_sums(alldata) / float(bign))
-    ssbn = 0
-    for a in args:
-        ssbn += _square_of_sums(a - offset) / float(len(a))
-
+    ssbn = sum(_square_of_sums(a - offset) / float(len(a)) for a in args)
     # Naming: variables ending in bn/b are for "between treatments", wn/w are
     # for "within treatments"
     ssbn -= _square_of_sums(alldata) / float(bign)
@@ -416,10 +402,7 @@ def _ttest_finish(df, t):
 
 
 def _count(x, axis=None):
-    if axis is None:
-        return x.size
-    else:
-        return x.shape[axis]
+    return x.size if axis is None else x.shape[axis]
 
 
 def _sum_of_squares(a, axis=0):

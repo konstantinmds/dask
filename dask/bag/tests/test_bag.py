@@ -151,10 +151,10 @@ def test_filter():
     c = b.filter(iseven)
     expected = merge(
         dsk,
-        dict(
-            ((c.name, i), (reify, (filter, iseven, (b.name, i))))
+        {
+            (c.name, i): (reify, (filter, iseven, (b.name, i)))
             for i in range(b.npartitions)
-        ),
+        },
     )
     assert c.dask == expected
     assert c.name == b.filter(iseven).name
@@ -181,9 +181,9 @@ def test_repr(func):
 def test_pluck():
     d = {("x", 0): [(1, 10), (2, 20)], ("x", 1): [(3, 30), (4, 40)]}
     b = Bag(d, "x", 2)
-    assert set(b.pluck(0)) == set([1, 2, 3, 4])
-    assert set(b.pluck(1)) == set([10, 20, 30, 40])
-    assert set(b.pluck([1, 0])) == set([(10, 1), (20, 2), (30, 3), (40, 4)])
+    assert set(b.pluck(0)) == {1, 2, 3, 4}
+    assert set(b.pluck(1)) == {10, 20, 30, 40}
+    assert set(b.pluck([1, 0])) == {(10, 1), (20, 2), (30, 3), (40, 4)}
     assert b.pluck([1, 0]).name == b.pluck([1, 0]).name
 
 
@@ -231,7 +231,7 @@ def test_fold():
     )
 
     e = db.from_sequence([[1], [2], [3]], npartitions=2)
-    assert set(e.fold(add, initial=[]).compute(scheduler="sync")) == set([1, 2, 3])
+    assert set(e.fold(add, initial=[]).compute(scheduler="sync")) == {1, 2, 3}
 
 
 def test_fold_bag():
@@ -403,7 +403,7 @@ def test_foldby():
 
 
 def test_foldby_tree_reduction():
-    dsk = list()
+    dsk = []
     for n in [1, 7, 32]:
         b = db.from_sequence(range(100), npartitions=n)
         c = b.foldby(iseven, add)
@@ -416,7 +416,7 @@ def test_foldby_tree_reduction():
             dsk += [d, e, f, g]
     results = dask.compute(dsk)
     first = results[0]
-    assert all([r == first for r in results])
+    assert all(r == first for r in results)
 
 
 def test_map_partitions():
@@ -484,7 +484,6 @@ def test_random_sample_repeated_computation():
     """
     a = db.from_sequence(range(50), npartitions=5)
     b = a.random_sample(0.2)
-    assert list(b) == list(b)  # computation happens here
 
 
 def test_random_sample_different_definitions():
@@ -609,8 +608,8 @@ def test_from_url():
 
 def test_read_text():
     with filetexts({"a1.log": "A\nB", "a2.log": "C\nD"}) as fns:
-        assert set(line.strip() for line in db.read_text(fns)) == set("ABCD")
-        assert set(line.strip() for line in db.read_text("a*.log")) == set("ABCD")
+        assert {line.strip() for line in db.read_text(fns)} == set("ABCD")
+        assert {line.strip() for line in db.read_text("a*.log")} == set("ABCD")
 
     pytest.raises(ValueError, lambda: db.read_text("non-existent-*-path"))
 
@@ -618,7 +617,7 @@ def test_read_text():
 def test_read_text_large():
     with tmpfile() as fn:
         with open(fn, "wb") as f:
-            f.write(("Hello, world!" + os.linesep).encode() * 100)
+            f.write(f"Hello, world!{os.linesep}".encode() * 100)
         b = db.read_text(fn, blocksize=100)
         c = db.read_text(fn)
         assert len(b.dask) > 5
@@ -631,7 +630,7 @@ def test_read_text_large():
 def test_read_text_encoding():
     with tmpfile() as fn:
         with open(fn, "wb") as f:
-            f.write((u"你好！" + os.linesep).encode("gb18030") * 100)
+            f.write(f"你好！{os.linesep}".encode("gb18030") * 100)
         b = db.read_text(fn, blocksize=100, encoding="gb18030")
         c = db.read_text(fn, encoding="gb18030")
         assert len(b.dask) > 5
@@ -689,7 +688,7 @@ def test_from_s3():
 def test_from_sequence():
     b = db.from_sequence([1, 2, 3, 4, 5], npartitions=3)
     assert len(b.dask) == 3
-    assert set(b) == set([1, 2, 3, 4, 5])
+    assert set(b) == {1, 2, 3, 4, 5}
 
 
 def test_from_long_sequence():
@@ -708,12 +707,12 @@ def test_from_empty_sequence():
 def test_product():
     b2 = b.product(b)
     assert b2.npartitions == b.npartitions ** 2
-    assert set(b2) == set([(i, j) for i in L for j in L])
+    assert set(b2) == {(i, j) for i in L for j in L}
 
     x = db.from_sequence([1, 2, 3, 4])
     y = db.from_sequence([10, 20, 30])
     z = x.product(y)
-    assert set(z) == set([(i, j) for i in [1, 2, 3, 4] for j in [10, 20, 30]])
+    assert set(z) == {(i, j) for i in [1, 2, 3, 4] for j in [10, 20, 30]}
 
     assert z.name != b2.name
     assert z.name == x.product(y).name
@@ -722,9 +721,9 @@ def test_product():
 def test_partition_collect():
     with partd.Pickle() as p:
         partition(identity, range(6), 3, p)
-        assert set(p.get(0)) == set([0, 3])
-        assert set(p.get(1)) == set([1, 4])
-        assert set(p.get(2)) == set([2, 5])
+        assert set(p.get(0)) == {0, 3}
+        assert set(p.get(1)) == {1, 4}
+        assert set(p.get(2)) == {2, 5}
 
         assert sorted(collect(identity, 0, p, "")) == [(0, [0]), (3, [3])]
 
@@ -861,11 +860,11 @@ ext_open = [("gz", GzipFile), ("bz2", BZ2File), ("", open)]
 def test_to_textfiles(ext, myopen):
     b = db.from_sequence(["abc", "123", "xyz"], npartitions=2)
     with tmpdir() as dir:
-        c = b.to_textfiles(os.path.join(dir, "*." + ext), compute=False)
+        c = b.to_textfiles(os.path.join(dir, f"*.{ext}"), compute=False)
         dask.compute(*c, scheduler="sync")
-        assert os.path.exists(os.path.join(dir, "1." + ext))
+        assert os.path.exists(os.path.join(dir, f"1.{ext}"))
 
-        f = myopen(os.path.join(dir, "1." + ext), "rb")
+        f = myopen(os.path.join(dir, f"1.{ext}"), "rb")
         text = f.read()
         if hasattr(text, "decode"):
             text = text.decode()
@@ -935,12 +934,14 @@ def test_to_textfiles_encoding():
     for ext, myopen in ext_open:
         with tmpdir() as dir:
             c = b.to_textfiles(
-                os.path.join(dir, "*." + ext), encoding="gb18030", compute=False
+                os.path.join(dir, f"*.{ext}"),
+                encoding="gb18030",
+                compute=False,
             )
             dask.compute(*c)
-            assert os.path.exists(os.path.join(dir, "1." + ext))
+            assert os.path.exists(os.path.join(dir, f"1.{ext}"))
 
-            f = myopen(os.path.join(dir, "1." + ext), "rb")
+            f = myopen(os.path.join(dir, f"1.{ext}"), "rb")
             text = f.read()
             if hasattr(text, "decode"):
                 text = text.decode("gb18030")
@@ -1088,7 +1089,7 @@ def test_to_delayed_optimize_graph():
     x = b2.sum()
     d = x.to_delayed()
     text = str(dict(d.dask))
-    assert text.count("reify") == 0
+    assert "reify" not in text
     d2 = x.to_delayed(optimize_graph=False)
     assert dict(d2.dask) == dict(x.dask)
     assert d.compute() == d2.compute()
@@ -1174,7 +1175,7 @@ def test_repartition_names():
 @pytest.mark.skipif("not db.core._implement_accumulate")
 def test_accumulate():
     parts = [[1, 2, 3], [4, 5], [], [6, 7]]
-    dsk = dict((("test", i), p) for (i, p) in enumerate(parts))
+    dsk = {("test", i): p for (i, p) in enumerate(parts)}
     b = db.Bag(dsk, "test", len(parts))
     r = b.accumulate(add)
     assert r.name == b.accumulate(add).name
@@ -1300,7 +1301,7 @@ def test_reduction_with_sparse_matrices():
 
 
 def test_empty():
-    list(db.from_sequence([])) == []
+    not list(db.from_sequence([]))
 
 
 def test_bag_picklable():

@@ -146,7 +146,7 @@ def test_unregistered_func(func):
 
         def wrapped(self, *a, **kw):
             a = getattr(self.arr, func_name)(*a, **kw)
-            return a if not isinstance(a, np.ndarray) else type(self)(a)
+            return type(self)(a) if isinstance(a, np.ndarray) else a
 
         return wrapped
 
@@ -160,6 +160,8 @@ def test_unregistered_func(func):
             return getattr(self.arr, prop_name)
 
         return wrapped
+
+
 
     class EncapsulateNDArray(np.lib.mixins.NDArrayOperatorsMixin):
         """
@@ -178,24 +180,20 @@ def test_unregistered_func(func):
             return np.asarray(self.arr, *args, **kwargs)
 
         def __array_function__(self, f, t, arrs, kw):
-            arrs = tuple(
-                arr if not isinstance(arr, type(self)) else arr.arr for arr in arrs
-            )
+            arrs = tuple(arr.arr if isinstance(arr, type(self)) else arr for arr in arrs)
             t = tuple(ti for ti in t if not issubclass(ti, type(self)))
             print(t)
             a = self.arr.__array_function__(f, t, arrs, kw)
-            return a if not isinstance(a, np.ndarray) else type(self)(a)
+            return type(self)(a) if isinstance(a, np.ndarray) else a
 
         __getitem__ = wrap("__getitem__")
 
         __setitem__ = wrap("__setitem__")
 
         def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-            inputs = tuple(
-                i if not isinstance(i, type(self)) else i.arr for i in inputs
-            )
+            inputs = tuple(i.arr if isinstance(i, type(self)) else i for i in inputs)
             a = getattr(ufunc, method)(*inputs, **kwargs)
-            return a if not isinstance(a, np.ndarray) else type(self)(a)
+            return type(self)(a) if isinstance(a, np.ndarray) else a
 
         shape = dispatch_property("shape")
         ndim = dispatch_property("ndim")
@@ -204,6 +202,7 @@ def test_unregistered_func(func):
         astype = wrap("astype")
         sum = wrap("sum")
         prod = wrap("prod")
+
 
     # Wrap a procol-based encapsulated ndarray
     x = EncapsulateNDArray(np.random.random((100, 100)))

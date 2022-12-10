@@ -160,7 +160,7 @@ def start_state_from_dask(dsk, cache=None, sortkey=None):
     if cache is None:
         cache = config.get("cache", None)
     if cache is None:
-        cache = dict()
+        cache = {}
     data_keys = set()
     for k, v in dsk.items():
         if not has_tasks(dsk, v):
@@ -177,13 +177,13 @@ def start_state_from_dask(dsk, cache=None, sortkey=None):
     for a in cache:
         for b in dependents.get(a, ()):
             waiting[b].remove(a)
-    waiting_data = dict((k, v.copy()) for k, v in dependents.items() if v)
+    waiting_data = {k: v.copy() for k, v in dependents.items() if v}
 
-    ready_set = set([k for k, v in waiting.items() if not v])
+    ready_set = {k for k, v in waiting.items() if not v}
     ready = sorted(ready_set, key=sortkey, reverse=True)
-    waiting = dict((k, v) for k, v in waiting.items() if v)
+    waiting = {k: v for k, v in waiting.items() if v}
 
-    state = {
+    return {
         "dependencies": dependencies,
         "dependents": dependents,
         "waiting": waiting,
@@ -194,8 +194,6 @@ def start_state_from_dask(dsk, cache=None, sortkey=None):
         "finished": set(),
         "released": set(),
     }
-
-    return state
 
 
 """
@@ -296,7 +294,7 @@ def nested_get(ind, coll):
     (('b', 'a'), ('a', 'b'))
     """
     if isinstance(ind, list):
-        return tuple([nested_get(i, coll) for i in ind])
+        return tuple(nested_get(i, coll) for i in ind)
     else:
         return coll[ind]
 
@@ -406,10 +404,7 @@ def get_async(
     """
     queue = Queue()
 
-    if isinstance(result, list):
-        result_flat = set(flatten(result))
-    else:
-        result_flat = set([result])
+    result_flat = set(flatten(result)) if isinstance(result, list) else {result}
     results = set(result_flat)
 
     dsk = dict(dsk)
@@ -449,9 +444,7 @@ def get_async(
                     f(key, dsk, state)
 
                 # Prep data to send
-                data = dict(
-                    (dep, state["cache"][dep]) for dep in get_dependencies(dsk, key)
-                )
+                data = {dep: state["cache"][dep] for dep in get_dependencies(dsk, key)}
                 # Submit
                 apply_async(
                     execute_task,
@@ -476,10 +469,7 @@ def get_async(
                 if failed:
                     exc, tb = loads(res_info)
                     if rerun_exceptions_locally:
-                        data = dict(
-                            (dep, state["cache"][dep])
-                            for dep in get_dependencies(dsk, key)
-                        )
+                        data = {dep: state["cache"][dep] for dep in get_dependencies(dsk, key)}
                         task = dsk[key]
                         _execute_task(task, data)  # Re-execute locally
                     else:

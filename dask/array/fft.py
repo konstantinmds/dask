@@ -93,10 +93,7 @@ def _ihfft_out_chunks(a, s, axes):
     n = s[0]
 
     chunks = list(a.chunks)
-    if n % 2 == 0:
-        m = (n // 2) + 1
-    else:
-        m = (n + 1) // 2
+    m = (n // 2) + 1 if n % 2 == 0 else (n + 1) // 2
     chunks[axis] = (m,)
     return chunks
 
@@ -151,17 +148,14 @@ def fft_wrap(fft_func, kind=None, dtype=None):
     try:
         out_chunk_fn = _out_chunk_fns[kind.rstrip("2n")]
     except KeyError:
-        raise ValueError("Given unknown `kind` %s." % kind)
+        raise ValueError(f"Given unknown `kind` {kind}.")
 
     def func(a, s=None, axes=None):
         if axes is None:
             if kind.endswith("2"):
                 axes = (-2, -1)
             elif kind.endswith("n"):
-                if s is None:
-                    axes = tuple(range(a.ndim))
-                else:
-                    axes = tuple(range(len(s)))
+                axes = tuple(range(a.ndim)) if s is None else tuple(range(len(s)))
             else:
                 axes = (-1,)
         else:
@@ -206,7 +200,7 @@ def fft_wrap(fft_func, kind=None, dtype=None):
 
     func_mod = inspect.getmodule(fft_func)
     func_name = fft_func.__name__
-    func_fullname = func_mod.__name__ + "." + func_name
+    func_fullname = f"{func_mod.__name__}.{func_name}"
     if fft_func.__doc__ is not None:
         func.__doc__ = fft_preamble % (2 * (func_fullname,))
         func.__doc__ += fft_func.__doc__

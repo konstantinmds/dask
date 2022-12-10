@@ -80,7 +80,7 @@ def expand_key(k, dims, name=None, axes=None):
 
     def inds(i, ind):
         rv = []
-        if ind - 0.9 > 0:
+        if ind > 0 + 0.9:
             rv.append(ind - 0.9)
         rv.append(ind)
         if ind + 0.9 < dims[i] - 1:
@@ -129,8 +129,8 @@ def overlap_internal(x, axes):
         x.__dask_keys__(), flatten, map(expand_key2), map(flatten), concat, list
     )
 
-    name = "overlap-" + tokenize(x, axes)
-    getitem_name = "getitem-" + tokenize(x, axes)
+    name = f"overlap-{tokenize(x, axes)}"
+    getitem_name = f"getitem-{tokenize(x, axes)}"
     interior_slices = {}
     overlap_blocks = {}
     for k in interior_keys:
@@ -159,9 +159,7 @@ def overlap_internal(x, axes):
         else:
             left = [bds[0] + left_depth]
             right = [bds[-1] + right_depth]
-            mid = []
-            for bd in bds[1:-1]:
-                mid.append(bd + left_depth + right_depth)
+            mid = [bd + left_depth + right_depth for bd in bds[1:-1]]
             chunks.append(left + mid + right)
 
     dsk = merge(interior_slices, overlap_blocks)
@@ -208,18 +206,13 @@ def trim_internal(x, axes, boundary=None):
         ilist = []
         for j, d in enumerate(bd):
             if bdy != "none":
-                if isinstance(overlap, tuple):
-                    d = d - sum(overlap)
-                else:
-                    d = d - overlap * 2
-
+                d = d - sum(overlap) if isinstance(overlap, tuple) else d - overlap * 2
+            elif isinstance(overlap, tuple):
+                d = d - overlap[0] if j != 0 else d
+                d = d - overlap[1] if j != len(bd) - 1 else d
             else:
-                if isinstance(overlap, tuple):
-                    d = d - overlap[0] if j != 0 else d
-                    d = d - overlap[1] if j != len(bd) - 1 else d
-                else:
-                    d = d - overlap if j != 0 else d
-                    d = d - overlap if j != len(bd) - 1 else d
+                d = d - overlap if j != 0 else d
+                d = d - overlap if j != len(bd) - 1 else d
 
             ilist.append(d)
         olist.append(tuple(ilist))
@@ -386,9 +379,9 @@ def boundaries(x, depth=None, kind=None):
     constant
     """
     if not isinstance(kind, dict):
-        kind = dict((i, kind) for i in range(x.ndim))
+        kind = {i: kind for i in range(x.ndim)}
     if not isinstance(depth, dict):
-        depth = dict((i, depth) for i in range(x.ndim))
+        depth = {i: depth for i in range(x.ndim)}
 
     for i in range(x.ndim):
         d = depth.get(i, 0)
@@ -478,12 +471,11 @@ def overlap(x, depth, boundary):
             )
     x2 = boundaries(x, depth2, boundary2)
     x3 = overlap_internal(x2, depth2)
-    trim = dict(
-        (k, v * 2 if boundary2.get(k, "none") != "none" else 0)
+    trim = {
+        k: v * 2 if boundary2.get(k, "none") != "none" else 0
         for k, v in depth2.items()
-    )
-    x4 = chunk.trim(x3, trim)
-    return x4
+    }
+    return chunk.trim(x3, trim)
 
 
 def add_dummy_padding(x, depth, boundary):
@@ -590,9 +582,7 @@ def map_overlap(x, func, depth, boundary=None, trim=True, **kwargs):
     for i in range(x.ndim):
         if isinstance(depth2[i], tuple) and boundary2[i] != "none":
             raise NotImplementedError(
-                "Asymmetric overlap is currently only implemented "
-                "for boundary='none', however boundary for dimension "
-                "{} is {}".format(i, boundary2[i])
+                f"Asymmetric overlap is currently only implemented for boundary='none', however boundary for dimension {i} is {boundary2[i]}"
             )
 
     assert all(type(c) is int for cc in x.chunks for c in cc)
@@ -600,10 +590,7 @@ def map_overlap(x, func, depth, boundary=None, trim=True, **kwargs):
     assert all(type(c) is int for cc in g.chunks for c in cc)
     g2 = g.map_blocks(func, **kwargs)
     assert all(type(c) is int for cc in g2.chunks for c in cc)
-    if trim:
-        return trim_internal(g2, depth2, boundary2)
-    else:
-        return g2
+    return trim_internal(g2, depth2, boundary2) if trim else g2
 
 
 def coerce_depth(ndim, depth):

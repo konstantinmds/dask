@@ -53,11 +53,7 @@ def svg_2d(chunks, offset=(0, 0), skew=(0, 0), size=200, sizes=None):
     )
     footer = "\n</svg>"
 
-    if shape[0] >= 100:
-        rotate = -90
-    else:
-        rotate = 0
-
+    rotate = -90 if shape[0] >= 100 else 0
     text = [
         "",
         "  <!-- Text -->",
@@ -91,11 +87,7 @@ def svg_3d(chunks, size=200, sizes=None, offset=(0, 0)):
     )
     footer = "\n</svg>"
 
-    if shape[1] >= 100:
-        rotate = -90
-    else:
-        rotate = 0
-
+    rotate = -90 if shape[1] >= 100 else 0
     text = [
         "",
         "  <!-- Text -->",
@@ -240,8 +232,7 @@ def svg_1d(chunks, sizes=None, **kwargs):
 
 def grid_points(chunks, sizes):
     cumchunks = [np.cumsum((0,) + c) for c in chunks]
-    points = [x * size / x[-1] for x, size in zip(cumchunks, sizes)]
-    return points
+    return [x * size / x[-1] for x, size in zip(cumchunks, sizes)]
 
 
 def draw_sizes(shape, size=200):

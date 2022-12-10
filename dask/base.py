@@ -500,7 +500,7 @@ def visualize(*args, **kwargs):
 
     dsk = dict(collections_to_dsk(args3, optimize_graph=optimize_graph))
     for d in dsks:
-        dsk.update(d)
+        dsk |= d
 
     color = kwargs.get("color")
 
@@ -525,7 +525,7 @@ def visualize(*args, **kwargs):
         }
         kwargs["data_attributes"] = {k: {"color": v} for k, v in colors.items()}
     elif color:
-        raise NotImplementedError("Unknown value color=%s" % color)
+        raise NotImplementedError(f"Unknown value color={color}")
 
     return dot_graph(dsk, filename=filename, **kwargs)
 
@@ -833,7 +833,7 @@ def register_numpy():
         try:
             name = x.__name__
             if getattr(np, name) is x:
-                return "np." + name
+                return f"np.{name}"
         except AttributeError:
             return normalize_function(x)
 
@@ -879,7 +879,7 @@ def _colorize(t):
     i = sum(v * 256 ** (len(t) - i - 1) for i, v in enumerate(t))
     h = hex(int(i))[2:].upper()
     h = "0" * (6 - len(h)) + h
-    return "#" + h
+    return f"#{h}"
 
 
 named_schedulers = {
@@ -895,12 +895,10 @@ try:
 except ImportError:
     pass
 else:
-    named_schedulers.update(
-        {
-            "processes": dask_multiprocessing.get,
-            "multiprocessing": dask_multiprocessing.get,
-        }
-    )
+    named_schedulers |= {
+        "processes": dask_multiprocessing.get,
+        "multiprocessing": dask_multiprocessing.get,
+    }
 
 
 get_err_msg = """
@@ -951,15 +949,14 @@ def get_scheduler(get=None, scheduler=None, collections=None, cls=None):
             return get_client().get
         elif scheduler.lower() in ["processes", "multiprocessing"]:
             raise ValueError(
-                "Please install cloudpickle to use the '%s' scheduler." % scheduler
+                f"Please install cloudpickle to use the '{scheduler}' scheduler."
             )
         else:
             raise ValueError(
-                "Expected one of [distributed, %s]"
-                % ", ".join(sorted(named_schedulers))
+                f'Expected one of [distributed, {", ".join(sorted(named_schedulers))}]'
             )
-        # else:  # try to connect to remote scheduler with this name
-        #     return get_client(scheduler).get
+            # else:  # try to connect to remote scheduler with this name
+            #     return get_client(scheduler).get
 
     if config.get("scheduler", None):
         return get_scheduler(scheduler=config.get("scheduler", None))
@@ -979,7 +976,7 @@ def get_scheduler(get=None, scheduler=None, collections=None, cls=None):
         collections = [c for c in collections if c is not None]
     if collections:
         get = collections[0].__dask_scheduler__
-        if not all(c.__dask_scheduler__ == get for c in collections):
+        if any(c.__dask_scheduler__ != get for c in collections):
             raise ValueError(
                 "Compute called on multiple collections with "
                 "differing default schedulers. Please specify a "

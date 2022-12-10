@@ -81,7 +81,7 @@ def percentile(a, q, interpolation="linear", method="default"):
     --------
     numpy.percentile : Numpy's equivalent Percentile function
     """
-    if not a.ndim == 1:
+    if a.ndim != 1:
         raise NotImplementedError("Percentiles only implemented for 1-d arrays")
     if isinstance(q, Number):
         q = [q]
@@ -96,11 +96,7 @@ def percentile(a, q, interpolation="linear", method="default"):
     if method not in allowed_methods:
         raise ValueError("method can only be 'default', 'dask' or 'tdigest'")
 
-    if method == "default":
-        internal_method = "dask"
-    else:
-        internal_method = method
-
+    internal_method = "dask" if method == "default" else method
     # Allow using t-digest if interpolation is allowed and dtype is of floating or integer type
     if (
         internal_method == "tdigest"
@@ -114,26 +110,25 @@ def percentile(a, q, interpolation="linear", method="default"):
             "crick", "crick is a required dependency for using the t-digest method."
         )
 
-        name = "percentile_tdigest_chunk-" + token
-        dsk = dict(
-            ((name, i), (_tdigest_chunk, (key)))
+        name = f"percentile_tdigest_chunk-{token}"
+        dsk = {
+            (name, i): (_tdigest_chunk, (key))
             for i, key in enumerate(a.__dask_keys__())
-        )
+        }
 
-        name2 = "percentile_tdigest-" + token
+        name2 = f"percentile_tdigest-{token}"
 
         dsk2 = {(name2, 0): (_percentiles_from_tdigest, q, sorted(dsk))}
 
-    # Otherwise use the custom percentile algorithm
     else:
 
-        name = "percentile_chunk-" + token
-        dsk = dict(
-            ((name, i), (_percentile, (key), q, interpolation))
+        name = f"percentile_chunk-{token}"
+        dsk = {
+            (name, i): (_percentile, (key), q, interpolation)
             for i, key in enumerate(a.__dask_keys__())
-        )
+        }
 
-        name2 = "percentile-" + token
+        name2 = f"percentile-{token}"
         dsk2 = {
             (name2, 0): (
                 merge_percentiles,

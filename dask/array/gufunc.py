@@ -18,7 +18,7 @@ from ..core import flatten
 # See https://docs.scipy.org/doc/numpy/reference/c-api.generalized-ufuncs.html
 _DIMENSION_NAME = r"\w+"
 _CORE_DIMENSION_LIST = "(?:{0:}(?:,{0:})*,?)?".format(_DIMENSION_NAME)
-_ARGUMENT = r"\({}\)".format(_CORE_DIMENSION_LIST)
+_ARGUMENT = f"\({_CORE_DIMENSION_LIST}\)"
 _INPUT_ARGUMENTS = "(?:{0:}(?:,{0:})*,?)?".format(_ARGUMENT)
 _OUTPUT_ARGUMENTS = "{0:}(?:,{0:})*".format(
     _ARGUMENT
@@ -45,7 +45,7 @@ def _parse_gufunc_signature(signature):
     """
     signature = signature.replace(" ", "")
     if not re.match(_SIGNATURE, signature):
-        raise ValueError("Not a valid gufunc signature: {}".format(signature))
+        raise ValueError(f"Not a valid gufunc signature: {signature}")
     in_txt, out_txt = signature.split("->")
     ins = [
         tuple(re.findall(_DIMENSION_NAME, arg)) for arg in re.findall(_ARGUMENT, in_txt)
@@ -81,7 +81,7 @@ def _validate_normalize_axes(axes, axis, keepdims, input_coredimss, output_cored
     .. [1] https://docs.scipy.org/doc/numpy/reference/ufuncs.html#optional-keyword-arguments
     """
     nin = len(input_coredimss)
-    nout = 1 if not isinstance(output_coredimss, list) else len(output_coredimss)
+    nout = len(output_coredimss) if isinstance(output_coredimss, list) else 1
 
     if axes is not None and axis is not None:
         raise ValueError(
@@ -136,41 +136,31 @@ def _validate_normalize_axes(axes, axis, keepdims, input_coredimss, output_cored
 
     # Treat outputs
     output_axes = axes[nin:]
-    output_axes = (
-        output_axes
-        if output_axes
-        else [tuple(range(-len(ocd), 0)) for ocd in output_coredimss]
-    )
+    output_axes = output_axes or [
+        tuple(range(-len(ocd), 0)) for ocd in output_coredimss
+    ]
     input_axes = axes[:nin]
 
     # Assert we have as many axes as output core dimensions
     for idx, (iax, icd) in enumerate(zip(input_axes, input_coredimss)):
         if len(iax) != len(icd):
             raise ValueError(
-                "The number of `axes` entries for argument #{} is not equal "
-                "the number of respective input core dimensions in signature".format(
-                    idx
-                )
+                f"The number of `axes` entries for argument #{idx} is not equal the number of respective input core dimensions in signature"
             )
     if not keepdims:
         for idx, (oax, ocd) in enumerate(zip(output_axes, output_coredimss)):
             if len(oax) != len(ocd):
                 raise ValueError(
-                    "The number of `axes` entries for argument #{} is not equal "
-                    "the number of respective output core dimensions in signature".format(
-                        idx
-                    )
+                    f"The number of `axes` entries for argument #{idx} is not equal the number of respective output core dimensions in signature"
                 )
-    else:
-        if input_coredimss:
-            icd0 = input_coredimss[0]
-            for icd in input_coredimss:
-                if icd0 != icd:
-                    raise ValueError(
-                        "To use `keepdims`, all core dimensions have to be equal"
-                    )
-            iax0 = input_axes[0]
-            output_axes = [iax0 for _ in output_coredimss]
+    elif input_coredimss:
+        icd0 = input_coredimss[0]
+        for icd in input_coredimss:
+            if icd0 != icd:
+                raise ValueError(
+                    "To use `keepdims`, all core dimensions have to be equal"
+                )
+        output_axes = [input_axes[0] for _ in output_coredimss]
 
     return input_axes, output_axes
 
@@ -290,14 +280,11 @@ def apply_gufunc(func, signature, *args, **kwargs):
     input_coredimss, output_coredimss = _parse_gufunc_signature(signature)
 
     ## Determine nout: nout = None for functions of one direct return; nout = int for return tuples
-    nout = None if not isinstance(output_coredimss, list) else len(output_coredimss)
+    nout = len(output_coredimss) if isinstance(output_coredimss, list) else None
 
     ## Determine and handle output_dtypes
     if output_dtypes is None:
-        if vectorize:
-            tempfunc = np.vectorize(func, signature=signature)
-        else:
-            tempfunc = func
+        tempfunc = np.vectorize(func, signature=signature) if vectorize else func
         output_dtypes = apply_infer_dtype(
             tempfunc, args, kwargs, "apply_gufunc", "output_dtypes", nout
         )
@@ -315,13 +302,13 @@ def apply_gufunc(func, signature, *args, **kwargs):
             output_dtypes = output_dtypes[0]
         else:
             otypes = output_dtypes
-    else:
-        if nout is not None:
-            raise ValueError(
-                "Must specify tuple of dtypes for `output_dtypes` for function with multiple outputs"
-            )
+    elif nout is None:
         otypes = [output_dtypes]
 
+    else:
+        raise ValueError(
+            "Must specify tuple of dtypes for `output_dtypes` for function with multiple outputs"
+        )
     ## Vectorize function, if required
     if vectorize:
         func = np.vectorize(func, signature=signature, otypes=otypes)
@@ -360,7 +347,7 @@ def apply_gufunc(func, signature, *args, **kwargs):
     input_shapes = [a.shape for a in args]
     input_chunkss = [a.chunks for a in args]
     num_loopdims = [len(s) - len(cd) for s, cd in zip(input_shapes, input_coredimss)]
-    max_loopdims = max(num_loopdims) if num_loopdims else None
+    max_loopdims = max(num_loopdims, default=None)
     core_input_shapes = [
         dict(zip(icd, s[n:]))
         for s, n, icd in zip(input_shapes, num_loopdims, input_coredimss)
@@ -392,9 +379,7 @@ def apply_gufunc(func, signature, *args, **kwargs):
     for dim, sizes in dimsizess.items():
         #### Check that the arrays have same length for same dimensions or dimension `1`
         if set(sizes).union({1}) != {1, max(sizes)}:
-            raise ValueError(
-                "Dimension `'{}'` with different lengths in arrays".format(dim)
-            )
+            raise ValueError(f"Dimension `'{dim}'` with different lengths in arrays")
         if not allow_rechunk:
             chunksizes = chunksizess[dim]
             #### Check if core dimensions consist of only one chunk
@@ -411,9 +396,7 @@ significantly.".format(
                 unique(c for s, c in zip(sizes, chunksizes) if s > 1)
             )
             if len(relevant_chunksizes) > 1:
-                raise ValueError(
-                    "Dimension `'{}'` with different chunksize present".format(dim)
-                )
+                raise ValueError(f"Dimension `'{dim}'` with different chunksize present")
 
     ## Apply function - use blockwise here
     arginds = list(concat(zip(args, input_dimss)))
@@ -443,11 +426,7 @@ significantly.".format(
             func, loop_output_dims, *arginds, concatenate=True, meta=meta, **kwargs
         )
 
-    if isinstance(tmp._meta, tuple):
-        metas = tmp._meta
-    else:
-        metas = (tmp._meta,)
-
+    metas = tmp._meta if isinstance(tmp._meta, tuple) else (tmp._meta, )
     ## Prepare output shapes
     loop_output_shape = tmp.shape
     loop_output_chunks = tmp.chunks

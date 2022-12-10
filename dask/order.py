@@ -122,7 +122,7 @@ def order(dsk, dependencies=None):
     def dependents_key(x):
         return (min_dependencies[x], -total_dependents.get(x, 0), StrComparable(x))
 
-    result = dict()
+    result = {}
     seen = set()  # tasks that should not be added again to the stack
     i = 0
 
@@ -157,7 +157,7 @@ def order(dsk, dependencies=None):
         deps = [
             d
             for d in dependents[item]
-            if d not in result and not (d in seen and len(waiting[d]) > 1)
+            if d not in result and (d not in seen or len(waiting[d]) <= 1)
         ]
         if len(deps) < 1000:
             deps = sorted(deps, key=dependents_key, reverse=True)
@@ -194,8 +194,8 @@ def ndependents(dependencies, dependents, total_dependencies):
     total_dependendents: Dict[key, int]
     min_dependencies: Dict[key, int]
     """
-    result = dict()
-    min_result = dict()
+    result = {}
+    min_result = {}
     num_needed = {k: len(v) for k, v in dependents.items()}
     current = {k for k, v in num_needed.items() if v == 0}
     while current:
@@ -225,7 +225,7 @@ def ndependencies(dependencies, dependents):
     >>> sorted(ndependencies(dependencies, dependents).items())
     [('a', 1), ('b', 2), ('c', 3)]
     """
-    result = dict()
+    result = {}
     num_needed = {k: len(v) for k, v in dependencies.items()}
     current = {k for k, v in num_needed.items() if v == 0}
     while current:

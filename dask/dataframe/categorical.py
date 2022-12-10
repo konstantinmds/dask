@@ -132,7 +132,7 @@ def categorize(df, columns=None, index=None, split_every=None, **kwargs):
         depth += 1
 
     dsk[(prefix, 0)] = (_get_categories_agg, [(a, i) for i in range(k)])
-    dsk.update(df.dask)
+    dsk |= df.dask
 
     # Compute the categories
     categories, index = compute_as_if_collection(type(df), dsk, (prefix, 0), **kwargs)

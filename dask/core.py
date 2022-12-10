@@ -67,12 +67,10 @@ def preorder_traversal(task):
 
     for item in task:
         if istask(item):
-            for i in preorder_traversal(item):
-                yield i
+            yield from preorder_traversal(item)
         elif isinstance(item, list):
             yield list
-            for i in preorder_traversal(item):
-                yield i
+            yield from preorder_traversal(item)
         else:
             yield item
 
@@ -252,8 +250,7 @@ def flatten(seq, container=list):
     else:
         for item in seq:
             if isinstance(item, container):
-                for item2 in flatten(item, container=container):
-                    yield item2
+                yield from flatten(item, container=container)
             else:
                 yield item
 
@@ -284,15 +281,13 @@ def subs(task, key, val):
     (inc, 1)
     """
     type_task = type(task)
-    if not (type_task is tuple and task and callable(task[0])):  # istask(task):
+    if type_task is not tuple or not task or not callable(task[0]):  # istask(task):
         try:
             if type_task is type(key) and task == key:
                 return val
         except Exception:
             pass
-        if type_task is list:
-            return [subs(x, key, val) for x in task]
-        return task
+        return [subs(x, key, val) for x in task] if type_task is list else task
     newargs = []
     for arg in task[1:]:
         type_arg = type(arg)
@@ -340,7 +335,7 @@ def _toposort(dsk, keys=None, returncycle=False, dependencies=None):
     seen = set()
 
     if dependencies is None:
-        dependencies = dict((k, get_dependencies(dsk, k)) for k in dsk)
+        dependencies = {k: get_dependencies(dsk, k) for k in dsk}
 
     for key in keys:
         if key in completed:
@@ -368,9 +363,8 @@ def _toposort(dsk, keys=None, returncycle=False, dependencies=None):
                         cycle.reverse()
                         if returncycle:
                             return cycle
-                        else:
-                            cycle = "->".join(str(x) for x in cycle)
-                            raise RuntimeError("Cycle detected in Dask: %s" % cycle)
+                        cycle = "->".join(str(x) for x in cycle)
+                        raise RuntimeError(f"Cycle detected in Dask: {cycle}")
                     next_nodes.append(nxt)
 
             if next_nodes:
@@ -382,9 +376,7 @@ def _toposort(dsk, keys=None, returncycle=False, dependencies=None):
                 completed.add(cur)
                 seen.remove(cur)
                 nodes.pop()
-    if returncycle:
-        return []
-    return ordered
+    return [] if returncycle else ordered
 
 
 def toposort(dsk, dependencies=None):
@@ -443,7 +435,7 @@ class literal(object):
         self.data = data
 
     def __repr__(self):
-        return "literal<type=%s>" % type(self.data).__name__
+        return f"literal<type={type(self.data).__name__}>"
 
     def __reduce__(self):
         return (literal, (self.data,))
@@ -461,6 +453,4 @@ def quote(x):
     >>> quote((add, 1, 2))  # doctest: +SKIP
     (literal<type=tuple>,)
     """
-    if istask(x) or type(x) is list:
-        return (literal(x),)
-    return x
+    return (literal(x), ) if istask(x) or type(x) is list else x

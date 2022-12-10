@@ -237,7 +237,7 @@ def linspace(
     div = (num - 1) if endpoint else num
     step = float(range_) / div
 
-    name = "linspace-" + tokenize((start, stop, num, endpoint, chunks, dtype))
+    name = f"linspace-{tokenize((start, stop, num, endpoint, chunks, dtype))}"
 
     dsk = {}
     blockstart = start
@@ -322,9 +322,9 @@ def arange(*args, **kwargs):
     chunks = normalize_chunks(chunks, (num,), dtype=dtype)
 
     if kwargs:
-        raise TypeError("Unexpected keyword argument(s): %s" % ",".join(kwargs.keys()))
+        raise TypeError(f'Unexpected keyword argument(s): {",".join(kwargs.keys())}')
 
-    name = "arange-" + tokenize((start, stop, step, chunks, dtype))
+    name = f"arange-{tokenize((start, stop, step, chunks, dtype))}"
     dsk = {}
     elem_count = 0
 
@@ -414,14 +414,11 @@ def indices(dimensions, dtype=int, chunks="auto"):
     if len(dimensions) != len(chunks):
         raise ValueError("Need same number of chunks as dimensions.")
 
-    xi = []
-    for i in range(len(dimensions)):
-        xi.append(arange(dimensions[i], dtype=dtype, chunks=(chunks[i],)))
-
-    grid = []
-    if np.prod(dimensions):
-        grid = meshgrid(*xi, indexing="ij")
-
+    xi = [
+        arange(dimensions[i], dtype=dtype, chunks=(chunks[i],))
+        for i in range(len(dimensions))
+    ]
+    grid = meshgrid(*xi, indexing="ij") if np.prod(dimensions) else []
     if grid:
         grid = stack(grid)
     else:
@@ -471,7 +468,7 @@ def eye(N, chunks="auto", M=None, k=0, dtype=float):
         chunks = normalize_chunks(chunks, shape=(N, M), dtype=dtype)
         chunks = chunks[0][0]
     token = tokenize(N, chunks, M, k, dtype)
-    name_eye = "eye-" + token
+    name_eye = f"eye-{token}"
 
     vchunks = [chunks] * (N // chunks)
     if N % chunks != 0:
@@ -497,7 +494,7 @@ def eye(N, chunks="auto", M=None, k=0, dtype=float):
 
 @derived_from(np)
 def diag(v):
-    name = "diag-" + tokenize(v)
+    name = f"diag-{tokenize(v)}"
 
     meta = meta_from_array(v, 2 if v.ndim == 1 else 1)
 
@@ -518,16 +515,15 @@ def diag(v):
             "v must be a dask array or numpy array, got {0}".format(type(v))
         )
     if v.ndim != 1:
-        if v.chunks[0] == v.chunks[1]:
-            dsk = {
-                (name, i): (np.diag, row[i]) for i, row in enumerate(v.__dask_keys__())
-            }
-            graph = HighLevelGraph.from_collections(name, dsk, dependencies=[v])
-            return Array(graph, name, (v.chunks[0],), meta=meta)
-        else:
+        if v.chunks[0] != v.chunks[1]:
             raise NotImplementedError(
                 "Extracting diagonals from non-square chunked arrays"
             )
+        dsk = {
+            (name, i): (np.diag, row[i]) for i, row in enumerate(v.__dask_keys__())
+        }
+        graph = HighLevelGraph.from_collections(name, dsk, dependencies=[v])
+        return Array(graph, name, (v.chunks[0],), meta=meta)
     chunks_1d = v.chunks[0]
     blocks = v.__dask_keys__()
     dsk = {}
@@ -546,7 +542,7 @@ def diag(v):
 
 @derived_from(np)
 def diagonal(a, offset=0, axis1=0, axis2=1):
-    name = "diagonal-" + tokenize(a, offset, axis1, axis2)
+    name = f"diagonal-{tokenize(a, offset, axis1, axis2)}"
 
     if a.ndim < 2:
         # NumPy uses `diag` as we do here.
@@ -588,7 +584,7 @@ def diagonal(a, offset=0, axis1=0, axis2=1):
             chunk_offsets[-1].append(k)
 
     dsk = {}
-    idx_set = set(range(a.ndim)) - set([axis1, axis2])
+    idx_set = set(range(a.ndim)) - {axis1, axis2}
     n1 = len(a.chunks[axis1])
     n2 = len(a.chunks[axis2])
     for idx in product(*(range(len(a.chunks[i])) for i in idx_set)):
@@ -647,20 +643,19 @@ def triu(m, k=0):
     chunk = m.chunks[0][0]
 
     token = tokenize(m, k)
-    name = "triu-" + token
+    name = f"triu-{token}"
 
     dsk = {}
-    for i in range(rdim):
-        for j in range(hdim):
-            if chunk * (j - i + 1) < k:
-                dsk[(name, i, j)] = (
-                    partial(zeros_like_safe, shape=(m.chunks[0][i], m.chunks[1][j])),
-                    m._meta,
-                )
-            elif chunk * (j - i - 1) < k <= chunk * (j - i + 1):
-                dsk[(name, i, j)] = (np.triu, (m.name, i, j), k - (chunk * (j - i)))
-            else:
-                dsk[(name, i, j)] = (m.name, i, j)
+    for i, j in product(range(rdim), range(hdim)):
+        if chunk * (j - i + 1) < k:
+            dsk[(name, i, j)] = (
+                partial(zeros_like_safe, shape=(m.chunks[0][i], m.chunks[1][j])),
+                m._meta,
+            )
+        elif chunk * (j - i - 1) < k <= chunk * (j - i + 1):
+            dsk[(name, i, j)] = (np.triu, (m.name, i, j), k - (chunk * (j - i)))
+        else:
+            dsk[(name, i, j)] = (m.name, i, j)
     graph = HighLevelGraph.from_collections(name, dsk, dependencies=[m])
     return Array(graph, name, shape=m.shape, chunks=m.chunks, meta=m)
 
@@ -688,7 +683,7 @@ def tril(m, k=0):
     """
     if m.ndim != 2:
         raise ValueError("input must be 2 dimensional")
-    if not len(set(m.chunks[0] + m.chunks[1])) == 1:
+    if len(set(m.chunks[0] + m.chunks[1])) != 1:
         msg = (
             "All chunks must be a square matrix to perform lu decomposition. "
             "Use .rechunk method to change the size of chunks."
@@ -700,20 +695,19 @@ def tril(m, k=0):
     chunk = m.chunks[0][0]
 
     token = tokenize(m, k)
-    name = "tril-" + token
+    name = f"tril-{token}"
 
     dsk = {}
-    for i in range(rdim):
-        for j in range(hdim):
-            if chunk * (j - i + 1) < k:
-                dsk[(name, i, j)] = (m.name, i, j)
-            elif chunk * (j - i - 1) < k <= chunk * (j - i + 1):
-                dsk[(name, i, j)] = (np.tril, (m.name, i, j), k - (chunk * (j - i)))
-            else:
-                dsk[(name, i, j)] = (
-                    partial(zeros_like_safe, shape=(m.chunks[0][i], m.chunks[1][j])),
-                    m._meta,
-                )
+    for i, j in product(range(rdim), range(hdim)):
+        if chunk * (j - i + 1) < k:
+            dsk[(name, i, j)] = (m.name, i, j)
+        elif chunk * (j - i - 1) < k <= chunk * (j - i + 1):
+            dsk[(name, i, j)] = (np.tril, (m.name, i, j), k - (chunk * (j - i)))
+        else:
+            dsk[(name, i, j)] = (
+                partial(zeros_like_safe, shape=(m.chunks[0][i], m.chunks[1][j])),
+                m._meta,
+            )
     graph = HighLevelGraph.from_collections(name, dsk, dependencies=[m])
     return Array(graph, name, shape=m.shape, chunks=m.chunks, meta=m)
 
@@ -729,7 +723,7 @@ def _np_fromfunction(func, shape, dtype, offset, func_kwargs):
 @derived_from(np)
 def fromfunction(func, chunks="auto", shape=None, dtype=None, **kwargs):
     chunks = normalize_chunks(chunks, shape, dtype=dtype)
-    name = "fromfunction-" + tokenize(func, chunks, shape, dtype, kwargs)
+    name = f"fromfunction-{tokenize(func, chunks, shape, dtype, kwargs)}"
     keys = list(product([name], *[range(len(bd)) for bd in chunks]))
     aggdims = [list(accumulate(add, (0,) + bd[:-1])) for bd in chunks]
     offsets = list(product(*aggdims))
@@ -769,10 +763,11 @@ def repeat(a, repeats, axis=None):
     slices = []
     for c_start, c_stop in sliding_window(2, cchunks):
         ls = np.linspace(c_start, c_stop, repeats).round(0)
-        for ls_start, ls_stop in sliding_window(2, ls):
-            if ls_start != ls_stop:
-                slices.append(slice(ls_start, ls_stop))
-
+        slices.extend(
+            slice(ls_start, ls_stop)
+            for ls_start, ls_stop in sliding_window(2, ls)
+            if ls_start != ls_stop
+        )
     all_slice = slice(None, None, None)
     slices = [
         (all_slice,) * axis + (s,) + (all_slice,) * (a.ndim - axis - 1) for s in slices
@@ -891,7 +886,7 @@ def pad_edge(array, pad_width, mode, *args):
     args = tuple(expand_pad_value(array, e) for e in args)
 
     result = array
-    for d in range(array.ndim):
+    for d in range(result.ndim):
         pad_shapes, pad_chunks = get_pad_shapes_chunks(result, pad_width, (d,))
         pad_arrays = [result, result]
 
@@ -1028,13 +1023,12 @@ def pad_stats(array, pad_width, mode, *args):
                 pad_shape.append(s)
                 pad_chunks.append(c)
 
-        axes = tuple(axes)
         select = tuple(select)
         pad_shape = tuple(pad_shape)
         pad_chunks = tuple(pad_chunks)
 
         result_idx = array[select]
-        if axes:
+        if axes := tuple(axes):
             if mode == "maximum":
                 result_idx = result_idx.max(axis=axes, keepdims=True)
             elif mode == "mean":

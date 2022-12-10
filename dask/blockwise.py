@@ -34,10 +34,7 @@ def subs(task, substitution):
 
 def index_subs(ind, substitution):
     """ A simple subs function that works both on tuples and strings """
-    if ind is None:
-        return ind
-    else:
-        return tuple([substitution.get(c, c) for c in ind])
+    return ind if ind is None else tuple(substitution.get(c, c) for c in ind)
 
 
 def blockwise_token(i, prefix="_"):
@@ -84,8 +81,8 @@ def blockwise(
     argpairs = list(toolz.partition(2, arrind_pairs))
 
     # separate argpairs into two separate tuples
-    inputs = tuple([name for name, _ in argpairs])
-    inputs_indices = tuple([index for _, index in argpairs])
+    inputs = tuple(name for name, _ in argpairs)
+    inputs_indices = tuple(index for _, index in argpairs)
 
     # Unpack delayed objects in kwargs
     new_keys = {n for c in dependencies for n in c.__dask_layers__()}
@@ -99,7 +96,7 @@ def blockwise(
         inputs_indices = inputs_indices + (None,) * len(new_keys)
         kwargs = subs(kwargs, sub)
 
-    indices = [(k, v) for k, v in zip(inputs, inputs_indices)]
+    indices = list(zip(inputs, inputs_indices))
     keys = tuple(map(blockwise_token, range(len(inputs))))
 
     # Construct local graph
@@ -187,18 +184,17 @@ class Blockwise(Mapping):
     def _dict(self):
         if hasattr(self, "_cached_dict"):
             return self._cached_dict
-        else:
-            keys = tuple(map(blockwise_token, range(len(self.indices))))
-            func = SubgraphCallable(self.dsk, self.output, keys)
-            self._cached_dict = make_blockwise_graph(
-                func,
-                self.output,
-                self.output_indices,
-                *list(toolz.concat(self.indices)),
-                new_axes=self.new_axes,
-                numblocks=self.numblocks,
-                concatenate=self.concatenate
-            )
+        keys = tuple(map(blockwise_token, range(len(self.indices))))
+        func = SubgraphCallable(self.dsk, self.output, keys)
+        self._cached_dict = make_blockwise_graph(
+            func,
+            self.output,
+            self.output_indices,
+            *list(toolz.concat(self.indices)),
+            new_axes=self.new_axes,
+            numblocks=self.numblocks,
+            concatenate=self.concatenate
+        )
         return self._cached_dict
 
     def __getitem__(self, key):
@@ -350,7 +346,7 @@ def make_blockwise_graph(func, output, out_indices, *arrind_pairs, **kwargs):
     keydicts = [dict(zip(out_indices, tup)) for tup in keytups]
 
     # {j: [1, 2, 3], ...}  For j a dummy index of dimension 3
-    dummies = dict((i, list(range(dims[i]))) for i in dummy_indices)
+    dummies = {i: list(range(dims[i])) for i in dummy_indices}
 
     dsk = {}
 
@@ -383,7 +379,7 @@ def make_blockwise_graph(func, output, out_indices, *arrind_pairs, **kwargs):
     if kwargs:
         task, dsk2 = to_task_dask(kwargs)
         if dsk2:
-            dsk.update(ensure_dict(dsk2))
+            dsk |= ensure_dict(dsk2)
             kwargs2 = task
         else:
             kwargs2 = kwargs
@@ -634,7 +630,7 @@ def rewrite_blockwise(inputs):
                 if x not in inputs[dep].output_indices
             }
             extra = dict(zip(contracted, new_index_iter))
-            sub.update(extra)
+            sub |= extra
             new_indices = [(x, index_subs(j, sub)) for x, j in new_indices]
 
             # Update new_axes
@@ -682,7 +678,7 @@ def rewrite_blockwise(inputs):
     numblocks = toolz.merge([inp.numblocks for inp in inputs.values()])
     numblocks = {k: v for k, v in numblocks.items() if v is None or k in indices_check}
 
-    out = Blockwise(
+    return Blockwise(
         root,
         inputs[root].output_indices,
         dsk,
@@ -691,8 +687,6 @@ def rewrite_blockwise(inputs):
         new_axes=new_axes,
         concatenate=concatenate,
     )
-
-    return out
 
 
 def zero_broadcast_dimensions(lol, nblocks):
@@ -764,14 +758,14 @@ def broadcast_dimensions(argpairs, numblocks, sentinels=(1, (1,)), consolidate=N
     )
 
     g = toolz.groupby(0, L)
-    g = dict((k, set([d for i, d in v])) for k, v in g.items())
+    g = {k: {d for i, d in v} for k, v in g.items()}
 
-    g2 = dict((k, v - set(sentinels) if len(v) > 1 else v) for k, v in g.items())
+    g2 = {k: v - set(sentinels) if len(v) > 1 else v for k, v in g.items()}
 
     if consolidate:
         return toolz.valmap(consolidate, g2)
 
-    if g2 and not set(map(len, g2.values())) == set([1]):
-        raise ValueError("Shapes do not align %s" % g)
+    if g2 and set(map(len, g2.values())) != {1}:
+        raise ValueError(f"Shapes do not align {g}")
 
     return toolz.valmap(toolz.first, g2)

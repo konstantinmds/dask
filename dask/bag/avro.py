@@ -40,16 +40,15 @@ def read_header(fo):
     """
     assert fo.read(len(MAGIC)) == MAGIC, "Magic avro bytes missing"
     meta = {}
-    out = {"meta": meta}
     while True:
         n_keys = read_long(fo)
         if n_keys == 0:
             break
-        for i in range(n_keys):
+        for _ in range(n_keys):
             # ignore dtype mapping for bag version
             read_bytes(fo)  # schema keys
             read_bytes(fo)  # schema values
-    out["sync"] = fo.read(SYNC_SIZE)
+    out = {"meta": meta, "sync": fo.read(SYNC_SIZE)}
     out["header_size"] = fo.tell()
     fo.seek(0)
     out["head_bytes"] = fo.read(out["header_size"])
@@ -121,7 +120,7 @@ def read_avro(urlpath, blocksize=100000000, storage_options=None, compression=No
             token = tokenize(
                 fs_token, delimiter, path, fs.ukey(path), compression, offset
             )
-            keys = ["read-avro-%s-%s" % (o, token) for o in offset]
+            keys = [f"read-avro-{o}-{token}" for o in offset]
             values = [
                 dread(f, o, l, head, dask_key_name=key)
                 for o, key, l in zip(offset, keys, length)
@@ -249,7 +248,7 @@ def to_avro(
         num=b.npartitions,
         **storage_options
     )
-    name = "to-avro-" + uuid.uuid4().hex
+    name = f"to-avro-{uuid.uuid4().hex}"
     dsk = {
         (name, i): (
             _write_avro_part,
@@ -274,11 +273,11 @@ def to_avro(
 def _verify_schema(s):
     assert isinstance(s, dict), "Schema must be dictionary"
     for field in ["name", "type", "fields"]:
-        assert field in s, "Schema missing '%s' field" % field
+        assert field in s, f"Schema missing '{field}' field"
     assert s["type"] == "record", "Schema must be of type 'record'"
     assert isinstance(s["fields"], list), "Fields entry must be a list"
     for f in s["fields"]:
-        assert "name" in f and "type" in f, "Field spec incomplete: %s" % f
+        assert "name" in f and "type" in f, f"Field spec incomplete: {f}"
 
 
 def _write_avro_part(part, f, schema, codec, sync_interval, metadata):

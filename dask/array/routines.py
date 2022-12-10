@@ -69,10 +69,7 @@ def atleast_3d(*arys):
 
         new_arys.append(x)
 
-    if len(new_arys) == 1:
-        return new_arys[0]
-    else:
-        return new_arys
+    return new_arys[0] if len(new_arys) == 1 else new_arys
 
 
 @derived_from(np)
@@ -87,10 +84,7 @@ def atleast_2d(*arys):
 
         new_arys.append(x)
 
-    if len(new_arys) == 1:
-        return new_arys[0]
-    else:
-        return new_arys
+    return new_arys[0] if len(new_arys) == 1 else new_arys
 
 
 @derived_from(np)
@@ -103,10 +97,7 @@ def atleast_1d(*arys):
 
         new_arys.append(x)
 
-    if len(new_arys) == 1:
-        return new_arys[0]
-    else:
-        return new_arys
+    return new_arys[0] if len(new_arys) == 1 else new_arys
 
 
 @derived_from(np)
@@ -181,9 +172,7 @@ def flip(m, axis):
     try:
         sl[axis] = slice(None, None, -1)
     except IndexError:
-        raise ValueError(
-            "`axis` of %s invalid for %s-D array" % (str(axis), str(m.ndim))
-        )
+        raise ValueError(f"`axis` of {str(axis)} invalid for {str(m.ndim)}-D array")
     sl = tuple(sl)
 
     return m[sl]
@@ -238,7 +227,7 @@ def tensordot(lhs, rhs, axes=2):
         left_axes, right_axes = axes
     else:
         left_axes = tuple(range(lhs.ndim - 1, lhs.ndim - axes - 1, -1))
-        right_axes = tuple(range(0, axes))
+        right_axes = tuple(range(axes))
 
     if isinstance(left_axes, Integral):
         left_axes = (left_axes,)
@@ -270,8 +259,7 @@ def tensordot(lhs, rhs, axes=2):
         axes=(left_axes, right_axes),
     )
 
-    result = intermediate.sum(axis=left_axes)
-    return result
+    return intermediate.sum(axis=left_axes)
 
 
 @derived_from(np)
@@ -380,32 +368,28 @@ def apply_along_axis(func1d, axis, arr, *args, dtype=None, shape=None, **kwargs)
     if shape is None or dtype is None:
         test_data = np.ones((1,), dtype=arr.dtype)
         test_result = np.array(func1d(test_data, *args, **kwargs))
-        if shape is None:
-            shape = test_result.shape
-        if dtype is None:
-            dtype = test_result.dtype
+    if shape is None:
+        shape = test_result.shape
+    if dtype is None:
+        dtype = test_result.dtype
 
     # Rechunk so that func1d is applied over the full axis.
     arr = arr.rechunk(
         arr.chunks[:axis] + (arr.shape[axis : axis + 1],) + arr.chunks[axis + 1 :]
     )
 
-    # Map func1d over the data to get the result
-    # Adds other axes as needed.
-    result = arr.map_blocks(
+    return arr.map_blocks(
         _inner_apply_along_axis,
-        name=funcname(func1d) + "-along-axis",
+        name=f"{funcname(func1d)}-along-axis",
         dtype=dtype,
         chunks=(arr.chunks[:axis] + shape + arr.chunks[axis + 1 :]),
         drop_axis=axis,
-        new_axis=list(range(axis, axis + len(shape), 1)),
+        new_axis=list(range(axis, axis + len(shape))),
         func1d=func1d,
         func1d_axis=axis,
         func1d_args=args,
         func1d_kwargs=kwargs,
     )
-
-    return result
 
 
 @derived_from(np)
@@ -457,7 +441,7 @@ def diff(a, n=1, axis=-1):
     sl_2 = tuple(sl_2)
 
     r = a
-    for i in range(n):
+    for _ in range(n):
         r = r[sl_1] - r[sl_2]
 
     return r
@@ -474,7 +458,7 @@ def ediff1d(ary, to_end=None, to_begin=None):
     if to_begin is not None:
         r = [asarray(to_begin).flatten()] + r
     if to_end is not None:
-        r = r + [asarray(to_end).flatten()]
+        r += [asarray(to_end).flatten()]
     r = concatenate(r)
 
     return r
@@ -493,11 +477,10 @@ def _gradient_kernel(x, block_id, coord, axis, array_locs, grad_kwargs):
     grad_kwargs:
         keyword to be passed to np.gradient
     """
-    block_loc = block_id[axis]
     if array_locs is not None:
+        block_loc = block_id[axis]
         coord = coord[array_locs[0][block_loc] : array_locs[1][block_loc]]
-    grad = np.gradient(x, coord, axis=axis, **grad_kwargs)
-    return grad
+    return np.gradient(x, coord, axis=axis, **grad_kwargs)
 
 
 @derived_from(np)
@@ -523,7 +506,7 @@ def gradient(f, *varargs, **kwargs):
 
     axis = tuple(ax % f.ndim for ax in axis)
 
-    if varargs == ():
+    if not varargs:
         varargs = (1,)
     if len(varargs) == 1:
         varargs = len(axis) * varargs
@@ -542,9 +525,7 @@ def gradient(f, *varargs, **kwargs):
         for c in f.chunks[ax]:
             if np.min(c) < kwargs["edge_order"] + 1:
                 raise ValueError(
-                    "Chunk size must be larger than edge_order + 1. "
-                    "Minimum chunk for axis {} is {}. Rechunk to "
-                    "proceed.".format(np.min(c), ax)
+                    f"Chunk size must be larger than edge_order + 1. Minimum chunk for axis {np.min(c)} is {ax}. Rechunk to proceed."
                 )
 
         if np.isscalar(varargs[i]):
@@ -591,13 +572,12 @@ def _bincount_sum(bincounts, dtype=int):
 def bincount(x, weights=None, minlength=0):
     if x.ndim != 1:
         raise ValueError("Input array must be one dimensional. Try using x.ravel()")
-    if weights is not None:
-        if weights.chunks != x.chunks:
-            raise ValueError("Chunks of input array x and weights must match.")
+    if weights is not None and weights.chunks != x.chunks:
+        raise ValueError("Chunks of input array x and weights must match.")
 
     token = tokenize(x, weights, minlength)
-    name = "bincount-" + token
-    final_name = "bincount-sum" + token
+    name = f"bincount-{token}"
+    final_name = f"bincount-sum{token}"
     # Call np.bincount on each block, possibly with weights
     if weights is not None:
         dsk = {
@@ -617,11 +597,7 @@ def bincount(x, weights=None, minlength=0):
         final_name, dsk, dependencies=[x] if weights is None else [x, weights]
     )
 
-    if minlength == 0:
-        chunks = ((np.nan,),)
-    else:
-        chunks = ((minlength,),)
-
+    chunks = ((np.nan, ), ) if minlength == 0 else ((minlength, ), )
     meta = meta_from_array(x, 1, dtype=dtype)
 
     return Array(graph, final_name, chunks, meta=meta)
@@ -703,7 +679,7 @@ def histogram(a, bins=None, range=None, normed=False, weights=None, density=None
     nchunks = len(list(flatten(a.__dask_keys__())))
     chunks = ((1,) * nchunks, (len(bins) - 1,))
 
-    name = "histogram-sum-" + token
+    name = f"histogram-sum-{token}"
 
     # Map the histogram to all bins
     def block_hist(x, range=None, weights=None):
@@ -770,10 +746,7 @@ def cov(m, y=None, rowvar=1, bias=0, ddof=None):
 
     # check ddof
     if ddof is None:
-        if bias == 0:
-            ddof = 1
-        else:
-            ddof = 0
+        ddof = 1 if bias == 0 else 0
     fact = float(N - ddof)
     if fact <= 0:
         warnings.warn("Degrees of freedom <= 0 for slice", RuntimeWarning)
@@ -784,10 +757,11 @@ def cov(m, y=None, rowvar=1, bias=0, ddof=None):
         X = concatenate((X, y), axis)
 
     X = X - X.mean(axis=1 - axis, keepdims=True)
-    if not rowvar:
-        return (dot(X.T, X.conj()) / fact).squeeze()
-    else:
-        return (dot(X, X.T.conj()) / fact).squeeze()
+    return (
+        (dot(X, X.T.conj()) / fact).squeeze()
+        if rowvar
+        else (dot(X.T, X.conj()) / fact).squeeze()
+    )
 
 
 @derived_from(np)
@@ -910,7 +884,7 @@ def unique(ar, return_index=False, return_inverse=False, return_counts=False):
     else:
         out_parts.append(None)
 
-    name = "unique-aggregate-" + out.name
+    name = f"unique-aggregate-{out.name}"
     dsk = {
         (name, 0): (
             (_unique_internal,)
@@ -953,11 +927,7 @@ def unique(ar, return_index=False, return_inverse=False, return_counts=False):
     if return_counts:
         result.append(out["counts"])
 
-    if len(result) == 1:
-        result = result[0]
-    else:
-        result = tuple(result)
-
+    result = result[0] if len(result) == 1 else tuple(result)
     return result
 
 
@@ -1097,10 +1067,7 @@ def compress(condition, a, axis=None):
         )
     ]
 
-    # Use `condition` to select along 1 dimension
-    a = a[tuple(condition if i == axis else slice(None) for i in range(a.ndim))]
-
-    return a
+    return a[tuple(condition if i == axis else slice(None) for i in range(a.ndim))]
 
 
 @derived_from(np)
@@ -1216,17 +1183,16 @@ def where(condition, x=None, y=None):
     if (x is None) and (y is None):
         return nonzero(condition)
 
-    if np.isscalar(condition):
-        dtype = result_type(x, y)
-        x = asarray(x)
-        y = asarray(y)
-
-        shape = broadcast_shapes(x.shape, y.shape)
-        out = x if condition else y
-
-        return broadcast_to(out, shape).astype(dtype)
-    else:
+    if not np.isscalar(condition):
         return elemwise(np.where, condition, x, y)
+    dtype = result_type(x, y)
+    x = asarray(x)
+    y = asarray(y)
+
+    shape = broadcast_shapes(x.shape, y.shape)
+    out = x if condition else y
+
+    return broadcast_to(out, shape).astype(dtype)
 
 
 @derived_from(np)
@@ -1260,9 +1226,8 @@ def _unravel_index_kernel(indices, func_kwargs):
 
 @derived_from(np)
 def unravel_index(indices, dims, order="C"):
-    # TODO: deprecate dims as well?
-    if dims and indices.size:
-        unraveled_indices = tuple(
+    return (
+        tuple(
             indices.map_blocks(
                 _unravel_index_kernel,
                 dtype=np.intp,
@@ -1271,10 +1236,9 @@ def unravel_index(indices, dims, order="C"):
                 func_kwargs={_unravel_index_keyword: dims, "order": order},
             )
         )
-    else:
-        unraveled_indices = tuple(empty((0,), dtype=np.intp, chunks=1) for i in dims)
-
-    return unraveled_indices
+        if dims and indices.size
+        else tuple(empty((0,), dtype=np.intp, chunks=1) for _ in dims)
+    )
 
 
 @derived_from(np)
@@ -1293,8 +1257,8 @@ def piecewise(x, condlist, funclist, *args, **kw):
 
 @wraps(chunk.coarsen)
 def coarsen(reduction, x, axes, trim_excess=False):
-    if not trim_excess and not all(
-        bd % div == 0 for i, div in axes.items() for bd in x.chunks[i]
+    if not trim_excess and any(
+        bd % div != 0 for i, div in axes.items() for bd in x.chunks[i]
     ):
         msg = "Coarsening factor does not align with block dimensions"
         raise ValueError(msg)
@@ -1302,7 +1266,7 @@ def coarsen(reduction, x, axes, trim_excess=False):
     if "dask" in inspect.getfile(reduction):
         reduction = getattr(np, reduction.__name__)
 
-    name = "coarsen-" + tokenize(reduction, x, axes, trim_excess)
+    name = f"coarsen-{tokenize(reduction, x, axes, trim_excess)}"
     dsk = {
         (name,) + key[1:]: (chunk.coarsen, reduction, key, axes, trim_excess)
         for key in flatten(x.__dask_keys__())
@@ -1325,8 +1289,7 @@ def split_at_breaks(array, breaks, axis=0):
     padded_breaks = concat([[None], breaks, [None]])
     slices = [slice(i, j) for i, j in sliding_window(2, padded_breaks)]
     preslice = (slice(None),) * axis
-    split_array = [array[preslice + (s,)] for s in slices]
-    return split_array
+    return [array[preslice + (s,)] for s in slices]
 
 
 @derived_from(np)
@@ -1352,7 +1315,7 @@ def insert(arr, obj, values, axis):
 
     if getattr(values, "ndim", 0) == 0:
         # we need to turn values into a dask array
-        name = "values-" + tokenize(values)
+        name = f"values-{tokenize(values)}"
         dtype = getattr(values, "dtype", type(values))
         values = Array({(name,): values}, name, chunks=(), dtype=dtype)
 
@@ -1421,12 +1384,11 @@ def _average(a, axis=None, weights=None, returned=False, is_masked=False):
         scl = wgt.sum(axis=axis, dtype=result_dtype)
         avg = multiply(a, wgt, dtype=result_dtype).sum(axis) / scl
 
-    if returned:
-        if scl.shape != avg.shape:
-            scl = broadcast_to(scl, avg.shape).copy()
-        return avg, scl
-    else:
+    if not returned:
         return avg
+    if scl.shape != avg.shape:
+        scl = broadcast_to(scl, avg.shape).copy()
+    return avg, scl
 
 
 @derived_from(np)

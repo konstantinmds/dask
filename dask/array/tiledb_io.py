@@ -3,7 +3,7 @@ from . import core
 
 def _tiledb_to_chunks(tiledb_array):
     schema = tiledb_array.schema
-    return list(schema.domain.dim(i).tile for i in range(schema.ndim))
+    return [schema.domain.dim(i).tile for i in range(schema.ndim)]
 
 
 def from_tiledb(uri, attribute=None, chunks=None, storage_options=None, **kwargs):
@@ -42,7 +42,7 @@ def from_tiledb(uri, attribute=None, chunks=None, storage_options=None, **kwargs
     """
     import tiledb
 
-    tiledb_config = storage_options or dict()
+    tiledb_config = storage_options or {}
     key = tiledb_config.pop("key", None)
 
     if isinstance(uri, tiledb.Array):
@@ -69,7 +69,7 @@ def from_tiledb(uri, attribute=None, chunks=None, storage_options=None, **kwargs
 
     assert len(chunks) == tdb.schema.ndim
 
-    return core.from_array(tdb, chunks, name="tiledb-%s" % uri)
+    return core.from_array(tdb, chunks, name=f"tiledb-{uri}")
 
 
 def to_tiledb(
@@ -125,7 +125,7 @@ def to_tiledb(
     """
     import tiledb
 
-    tiledb_config = storage_options or dict()
+    tiledb_config = storage_options or {}
     # encryption key, if any
     key = tiledb_config.pop("key", None)
 

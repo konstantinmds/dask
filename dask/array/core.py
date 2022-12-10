@@ -292,11 +292,7 @@ def _concatenate2(arrays, axes=[]):
            [3, 4]])
     """
     if axes == ():
-        if isinstance(arrays, list):
-            return arrays[0]
-        else:
-            return arrays
-
+        return arrays[0] if isinstance(arrays, list) else arrays
     if isinstance(arrays, Iterator):
         arrays = list(arrays)
     if not isinstance(arrays, (list, tuple)):
@@ -577,11 +573,7 @@ def map_blocks(
         (a, tuple(range(a.ndim))[::-1]) if isinstance(a, Array) else (a, None)
         for a in args
     ]
-    if arrs:
-        out_ind = tuple(range(max(a.ndim for a in arrs)))[::-1]
-    else:
-        out_ind = ()
-
+    out_ind = tuple(range(max(a.ndim for a in arrs)))[::-1] if arrs else ()
     if has_keyword(func, "block_id"):
         kwargs["block_id"] = "__block_id_dummy__"
     if has_keyword(func, "block_info"):
@@ -602,10 +594,7 @@ def map_blocks(
         for ax in sorted(new_axis):
             n = len(out_ind) + len(drop_axis)
             out_ind.insert(ax, n)
-            if chunks is not None:
-                new_axes[n] = chunks[ax]
-            else:
-                new_axes[n] = 1
+            new_axes[n] = chunks[ax] if chunks is not None else 1
         out_ind = tuple(out_ind)
         if max(new_axis) > max(out_ind):
             raise ValueError("New_axis values do not fill in all dimensions")
@@ -776,7 +765,7 @@ def broadcast_chunks(*chunkss):
         else:
             step2 = [c for c in step1 if c != (1,)]
         if len(set(step2)) != 1:
-            raise ValueError("Chunks do not align: %s" % str(step2))
+            raise ValueError(f"Chunks do not align: {step2}")
         result.append(step2[0])
     return tuple(result)
 
@@ -908,22 +897,19 @@ def store(
 
             load_store_dsk = retrieve_from_ooc(store_keys, store_dsk, store_dsk_2)
 
-        result = tuple(
-            Array(load_store_dsk, "load-store-%s" % t, s.chunks, meta=s)
+        return tuple(
+            Array(load_store_dsk, f"load-store-{t}", s.chunks, meta=s)
             for s, t in zip(sources, toks)
         )
-
-        return result
     else:
-        name = "store-" + str(uuid.uuid1())
+        name = f"store-{str(uuid.uuid1())}"
         dsk = HighLevelGraph.merge({name: store_keys}, store_dsk)
         result = Delayed(name, dsk)
 
-        if compute:
-            result.compute(**kwargs)
-            return None
-        else:
+        if not compute:
             return result
+        result.compute(**kwargs)
+        return None
 
 
 def blockdims_from_blockshape(shape, chunks):
@@ -940,8 +926,7 @@ def blockdims_from_blockshape(shape, chunks):
         raise TypeError("Must supply shape= keyword argument")
     if np.isnan(sum(shape)) or np.isnan(sum(chunks)):
         raise ValueError(
-            "Array chunk sizes are unknown. shape: %s, chunks: %s%s"
-            % (shape, chunks, unknown_chunk_message)
+            f"Array chunk sizes are unknown. shape: {shape}, chunks: {chunks}{unknown_chunk_message}"
         )
     if not all(map(is_integer, chunks)):
         raise ValueError("chunks can only contain integers.")
@@ -1183,16 +1168,15 @@ class Array(DaskMethodsMixin):
                 return apply_gufunc(
                     numpy_ufunc, numpy_ufunc.signature, *inputs, **kwargs
                 )
-            if numpy_ufunc.nout > 1:
-                from . import ufunc
-
-                try:
-                    da_ufunc = getattr(ufunc, numpy_ufunc.__name__)
-                except AttributeError:
-                    return NotImplemented
-                return da_ufunc(*inputs, **kwargs)
-            else:
+            if numpy_ufunc.nout <= 1:
                 return elemwise(numpy_ufunc, *inputs, **kwargs)
+            from . import ufunc
+
+            try:
+                da_ufunc = getattr(ufunc, numpy_ufunc.__name__)
+            except AttributeError:
+                return NotImplemented
+            return da_ufunc(*inputs, **kwargs)
         elif method == "outer":
             from . import ufunc
 
@@ -1213,14 +1197,7 @@ class Array(DaskMethodsMixin):
         """
         chunksize = str(self.chunksize)
         name = self.name.rsplit("-", 1)[0]
-        return "dask.array<%s, shape=%s, dtype=%s, chunksize=%s, chunktype=%s.%s>" % (
-            name,
-            self.shape,
-            self.dtype,
-            chunksize,
-            type(self._meta).__module__.split(".")[0],
-            type(self._meta).__name__,
-        )
+        return f'dask.array<{name}, shape={self.shape}, dtype={self.dtype}, chunksize={chunksize}, chunktype={type(self._meta).__module__.split(".")[0]}.{type(self._meta).__name__}>'
 
     def _repr_html_(self):
         table = self._repr_html_table()
@@ -1257,18 +1234,11 @@ class Array(DaskMethodsMixin):
             "    <tr><td> </td><th> Array </th><th> Chunk </th></tr>",
             "  </thead>",
             "  <tbody>",
-            "    <tr><th> Bytes </th><td> %s </td> <td> %s </td></tr>"
-            % (nbytes, cbytes),
-            "    <tr><th> Shape </th><td> %s </td> <td> %s </td></tr>"
-            % (str(self.shape), str(self.chunksize)),
+            f"    <tr><th> Bytes </th><td> {nbytes} </td> <td> {cbytes} </td></tr>",
+            f"    <tr><th> Shape </th><td> {str(self.shape)} </td> <td> {str(self.chunksize)} </td></tr>",
             "    <tr><th> Count </th><td> %d Tasks </td><td> %d Chunks </td></tr>"
             % (len(self.__dask_graph__()), self.npartitions),
-            "    <tr><th> Type </th><td> %s </td><td> %s.%s </td></tr>"
-            % (
-                self.dtype,
-                type(self._meta).__module__.split(".")[0],
-                type(self._meta).__name__,
-            ),
+            f'    <tr><th> Type </th><td> {self.dtype} </td><td> {type(self._meta).__module__.split(".")[0]}.{type(self._meta).__name__} </td></tr>',
             "  </tbody>",
             "</table>",
         ]
@@ -1319,11 +1289,13 @@ class Array(DaskMethodsMixin):
         def handle_nonmatching_names(func, args, kwargs):
             if func not in _HANDLED_FUNCTIONS:
                 warnings.warn(
-                    "The `{}` function is not implemented by Dask array. "
-                    "You may want to use the da.map_blocks function "
-                    "or something similar to silence this warning. "
-                    "Your code may stop working in a future release.".format(
-                        func.__module__ + "." + func.__name__
+                    (
+                        "The `{}` function is not implemented by Dask array. "
+                        "You may want to use the da.map_blocks function "
+                        "or something similar to silence this warning. "
+                        "Your code may stop working in a future release.".format(
+                            f"{func.__module__}.{func.__name__}"
+                        )
                     ),
                     FutureWarning,
                 )
@@ -1461,19 +1433,16 @@ class Array(DaskMethodsMixin):
     def __setitem__(self, key, value):
         from .routines import where
 
-        if isinstance(key, Array):
-            if isinstance(value, Array) and value.ndim > 1:
-                raise ValueError("boolean index array should have 1 dimension")
-            y = where(key, value, self)
-            self._meta = y._meta
-            self.dask = y.dask
-            self.name = y.name
-            self._chunks = y.chunks
-            return self
-        else:
-            raise NotImplementedError(
-                "Item assignment with %s not supported" % type(key)
-            )
+        if not isinstance(key, Array):
+            raise NotImplementedError(f"Item assignment with {type(key)} not supported")
+        if isinstance(value, Array) and value.ndim > 1:
+            raise ValueError("boolean index array should have 1 dimension")
+        y = where(key, value, self)
+        self._meta = y._meta
+        self.dask = y.dask
+        self.name = y.name
+        self._chunks = y.chunks
+        return self
 
     def __getitem__(self, index):
         # Field access, e.g. x['a'] or x[['a', 'b']]
@@ -1518,7 +1487,7 @@ class Array(DaskMethodsMixin):
         if all(isinstance(i, slice) and i == slice(None) for i in index2):
             return self
 
-        out = "getitem-" + tokenize(self, index2)
+        out = f"getitem-{tokenize(self, index2)}"
         dsk, chunks = slice_array(out, self.name, self.chunks, index2)
 
         graph = HighLevelGraph.from_collections(out, dsk, dependencies=[self])
@@ -1534,8 +1503,7 @@ class Array(DaskMethodsMixin):
             key = (key,)
         if any(k is None for k in key):
             raise IndexError(
-                "vindex does not support indexing with None (np.newaxis), "
-                "got {}".format(key)
+                f"vindex does not support indexing with None (np.newaxis), got {key}"
             )
         if all(isinstance(k, slice) for k in key):
             if all(
@@ -1543,9 +1511,7 @@ class Array(DaskMethodsMixin):
             ):
                 return self
             raise IndexError(
-                "vindex requires at least one non-slice to vectorize over "
-                "when the slices are not over the entire array (i.e, x[:]). "
-                "Use normal slicing instead when only using slices. Got: {}".format(key)
+                f"vindex requires at least one non-slice to vectorize over when the slices are not over the entire array (i.e, x[:]). Use normal slicing instead when only using slices. Got: {key}"
             )
         return _vindex(self, *key)
 
@@ -1586,7 +1552,7 @@ class Array(DaskMethodsMixin):
         index = normalize_index(index, self.numblocks)
         index = tuple(slice(k, k + 1) if isinstance(k, Number) else k for k in index)
 
-        name = "blocks-" + tokenize(self, index)
+        name = f"blocks-{tokenize(self, index)}"
 
         new_keys = np.array(self.__dask_keys__(), dtype=object)[index]
 
@@ -1758,10 +1724,7 @@ class Array(DaskMethodsMixin):
             is set to False and the `dtype` requirement is satisfied, the input
             array is returned instead of a copy.
         """
-        # Scalars don't take `casting` or `copy` kwargs - as such we only pass
-        # them to `map_blocks` if specified by user (different than defaults).
-        extra = set(kwargs) - {"casting", "copy"}
-        if extra:
+        if extra := set(kwargs) - {"casting", "copy"}:
             raise TypeError(
                 "astype does not take the following keyword "
                 "arguments: {0!s}".format(list(extra))
@@ -2265,7 +2228,7 @@ class Array(DaskMethodsMixin):
         graph = self.__dask_graph__()
         if optimize_graph:
             graph = self.__dask_optimize__(graph, keys)  # TODO, don't collape graph
-            name = "delayed-" + self.name
+            name = f"delayed-{self.name}"
             graph = HighLevelGraph.from_collections(name, graph, dependencies=())
         L = ndeepmap(self.ndim, lambda k: Delayed(k, graph), keys)
         return np.array(L, dtype=object)
@@ -2430,7 +2393,7 @@ def normalize_chunks(chunks, shape=None, limit=None, dtype=None, previous_chunks
     # Substitute byte limits with 'auto' now that limit is set.
     chunks = tuple("auto" if isinstance(c, str) and c != "auto" else c for c in chunks)
 
-    if any(c == "auto" for c in chunks):
+    if "auto" in chunks:
         chunks = auto_chunks(chunks, shape, limit, dtype, previous_chunks)
 
     if shape is not None:
@@ -2439,9 +2402,9 @@ def normalize_chunks(chunks, shape=None, limit=None, dtype=None, previous_chunks
     if chunks and shape is not None:
         chunks = sum(
             (
-                blockdims_from_blockshape((s,), (c,))
-                if not isinstance(c, (tuple, list))
-                else (c,)
+                (c,)
+                if isinstance(c, (tuple, list))
+                else blockdims_from_blockshape((s,), (c,))
                 for s, c in zip(shape, chunks)
             ),
             (),
@@ -2468,7 +2431,7 @@ def normalize_chunks(chunks, shape=None, limit=None, dtype=None, previous_chunks
                 "Got chunks=%s, shape=%s" % (chunks, shape)
             )
 
-    return tuple(tuple(int(x) if not math.isnan(x) else x for x in c) for c in chunks)
+    return tuple(tuple(x if math.isnan(x) else int(x) for x in c) for c in chunks)
 
 
 def auto_chunks(chunks, shape, limit, dtype, previous_chunks=None):
@@ -2527,16 +2490,14 @@ def auto_chunks(chunks, shape, limit, dtype, previous_chunks=None):
             and np.isnan(x).any()
         ):
             raise ValueError(
-                "Can not perform automatic rechunking with unknown "
-                "(nan) chunk sizes.%s" % unknown_chunk_message
+                f"Can not perform automatic rechunking with unknown (nan) chunk sizes.{unknown_chunk_message}"
             )
-
-    limit = max(1, limit)
 
     largest_block = np.prod(
         [cs if isinstance(cs, Number) else max(cs) for cs in chunks if cs != "auto"]
     )
 
+    limit = max(1, limit)
     if previous_chunks:
         # Base ideal ratio on the median chunk size of the previous chunks
         result = {a: np.median(previous_chunks[a]) for a in autos}
@@ -2581,12 +2542,9 @@ def auto_chunks(chunks, shape, limit, dtype, previous_chunks=None):
 
         for k, v in result.items():
             chunks[k] = v
-        return tuple(chunks)
-
     else:
         size = (limit / dtype.itemsize / largest_block) ** (1 / len(autos))
-        small = [i for i in autos if shape[i] < size]
-        if small:
+        if small := [i for i in autos if shape[i] < size]:
             for i in small:
                 chunks[i] = (shape[i],)
             return auto_chunks(chunks, shape, limit, dtype)
@@ -2594,7 +2552,8 @@ def auto_chunks(chunks, shape, limit, dtype, previous_chunks=None):
         for i in autos:
             chunks[i] = round_to(size, shape[i])
 
-        return tuple(chunks)
+
+    return tuple(chunks)
 
 
 def round_to(c, s):
@@ -2610,13 +2569,12 @@ def round_to(c, s):
     If c is larger than s then we want the largest multiple of s that is still
     smaller than c.
     """
-    if c <= s:
-        try:
-            return max(f for f in factors(s) if c / 2 <= f <= c)
-        except ValueError:  # no matching factors within factor of two
-            return max(1, int(c))
-    else:
+    if c > s:
         return c // s * s
+    try:
+        return max(f for f in factors(s) if c / 2 <= f <= c)
+    except ValueError:  # no matching factors within factor of two
+        return max(1, int(c))
 
 
 def _get_chunk_shape(a):
@@ -2714,10 +2672,10 @@ def from_array(
 
     if name in (None, True):
         token = tokenize(x, chunks)
-        original_name = "array-original-" + token
-        name = name or "array-" + token
+        original_name = f"array-original-{token}"
+        name = name or f"array-{token}"
     elif name is False:
-        original_name = name = "array-" + str(uuid.uuid1())
+        original_name = name = f"array-{str(uuid.uuid1())}"
     else:
         original_name = name
 
@@ -2804,7 +2762,7 @@ def from_zarr(
         z = zarr.Array(mapper, read_only=True, path=component, **kwargs)
     chunks = chunks if chunks is not None else z.chunks
     if name is None:
-        name = "from-zarr-" + tokenize(z, component, storage_options, chunks, **kwargs)
+        name = f"from-zarr-{tokenize(z, component, storage_options, chunks, **kwargs)}"
     return from_array(z, chunks, name=name)
 
 
@@ -2965,7 +2923,7 @@ def from_delayed(value, shape, dtype=None, meta=None, name=None):
     if not isinstance(value, Delayed) and hasattr(value, "key"):
         value = delayed(value)
 
-    name = name or "from-value-" + tokenize(value, shape, dtype, meta)
+    name = name or f"from-value-{tokenize(value, shape, dtype, meta)}"
     dsk = {(name,) + (0,) * len(shape): value.key}
     chunks = tuple((d,) for d in shape)
     # TODO: value._key may not be the name of the layer in value.dask
@@ -2994,7 +2952,7 @@ def from_func(func, shape, dtype=None, name=None, args=(), kwargs={}):
     >>> stack(arrays).compute()
     array([0, 1, 2, 3, 4])
     """
-    name = name or "from_func-" + tokenize(func, shape, dtype, args, kwargs)
+    name = name or f"from_func-{tokenize(func, shape, dtype, args, kwargs)}"
     if args or kwargs:
         func = partial(func, *args, **kwargs)
     dsk = {(name,) + (0,) * len(shape): (func,)}
@@ -3026,10 +2984,10 @@ def common_blockdim(blockdims):
     """
     if not any(blockdims):
         return ()
-    non_trivial_dims = set([d for d in blockdims if len(d) > 1])
+    non_trivial_dims = {d for d in blockdims if len(d) > 1}
     if len(non_trivial_dims) == 1:
         return first(non_trivial_dims)
-    if len(non_trivial_dims) == 0:
+    if not non_trivial_dims:
         return max(blockdims, key=first)
 
     if np.isnan(sum(map(sum, blockdims))):
@@ -3147,9 +3105,9 @@ def unify_chunks(*args, **kwargs):
             chunks = tuple(
                 chunkss[j]
                 if a.shape[n] > 1
-                else a.shape[n]
-                if not np.isnan(sum(chunkss[j]))
                 else None
+                if np.isnan(sum(chunkss[j]))
+                else a.shape[n]
                 for n, j in enumerate(i)
             )
             if chunks != a.chunks and all(a.chunks):
@@ -3441,7 +3399,7 @@ def concatenate(seq, axis=0, allow_unknown_chunksizes=False):
             )
         raise ValueError("Shapes do not align: %s", [x.shape for x in seq2])
 
-    inds = [list(range(ndim)) for i in range(n)]
+    inds = [list(range(ndim)) for _ in range(n)]
     for i, ind in enumerate(inds):
         ind[axis] = -(i + 1)
 
@@ -3451,16 +3409,14 @@ def concatenate(seq, axis=0, allow_unknown_chunksizes=False):
     bds = [a.chunks for a in seq2]
 
     chunks = (
-        seq2[0].chunks[:axis]
-        + (sum([bd[axis] for bd in bds], ()),)
-        + seq2[0].chunks[axis + 1 :]
-    )
+        seq2[0].chunks[:axis] + (sum((bd[axis] for bd in bds), ()),)
+    ) + seq2[0].chunks[axis + 1 :]
 
     cum_dims = [0] + list(accumulate(add, [len(a.chunks[axis]) for a in seq2]))
 
     names = [a.name for a in seq2]
 
-    name = "concatenate-" + tokenize(names, axis)
+    name = f"concatenate-{tokenize(names, axis)}"
     keys = list(product([name], *[range(len(bd)) for bd in chunks]))
 
     values = [
@@ -3574,20 +3530,18 @@ def insert_to_ooc(
     if region:
         slices = [fuse_slice(region, slc) for slc in slices]
 
-    name = "store-%s" % (tok or str(uuid.uuid1()))
+    name = f"store-{tok or str(uuid.uuid1())}"
     func = store_chunk
     args = ()
     if return_stored and load_stored:
-        name = "load-%s" % name
+        name = f"load-{name}"
         func = load_store_chunk
         args = args + (load_stored,)
 
-    dsk = {
+    return {
         (name,) + t[1:]: (func, t, out, slc, lock, return_stored) + args
         for t, slc in zip(core.flatten(arr.__dask_keys__()), slices)
     }
-
-    return dsk
 
 
 def retrieve_from_ooc(keys, dsk_pre, dsk_post=None):
@@ -3615,12 +3569,10 @@ def retrieve_from_ooc(keys, dsk_pre, dsk_post=None):
     if not dsk_post:
         dsk_post = {k: k for k in keys}
 
-    load_dsk = {
-        ("load-" + k[0],) + k[1:]: (load_chunk, dsk_post[k]) + dsk_pre[k][3:-1]
+    return {
+        (f"load-{k[0]}",) + k[1:]: (load_chunk, dsk_post[k]) + dsk_pre[k][3:-1]
         for k in keys
     }
-
-    return load_dsk
 
 
 def asarray(a, **kwargs):

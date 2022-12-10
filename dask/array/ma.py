@@ -46,7 +46,7 @@ def _tensordot(a, b, axes=2):
         iter(axes)
     except TypeError:
         axes_a = list(range(-axes, 0))
-        axes_b = list(range(0, axes))
+        axes_b = list(range(axes))
     else:
         axes_a, axes_b = axes
     try:
@@ -163,13 +163,12 @@ def masked_where(condition, a):
     cshape = getattr(condition, "shape", ())
     if cshape and cshape != a.shape:
         raise IndexError(
-            "Inconsistant shape between the condition and the "
-            "input (got %s and %s)" % (cshape, a.shape)
+            f"Inconsistant shape between the condition and the input (got {cshape} and {a.shape})"
         )
     condition = asanyarray(condition)
     a = asanyarray(a)
-    ainds = tuple(range(a.ndim))
     cinds = tuple(range(condition.ndim))
+    ainds = tuple(range(a.ndim))
     return blockwise(
         np.ma.masked_where, ainds, condition, cinds, a, ainds, dtype=a.dtype
     )

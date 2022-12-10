@@ -22,10 +22,7 @@ except AttributeError:
 
 
 def normalize_to_array(x):
-    if "cupy" in str(type(x)):  # TODO: avoid explicit reference to cupy
-        return x.get()
-    else:
-        return x
+    return x.get() if "cupy" in str(type(x)) else x
 
 
 def meta_from_array(x, ndim=None, dtype=None):
@@ -69,7 +66,7 @@ def meta_from_array(x, ndim=None, dtype=None):
     ):
         return x
 
-    if isinstance(x, list) or isinstance(x, tuple):
+    if isinstance(x, (list, tuple)):
         ndims = [
             0
             if isinstance(a, numbers.Number)
@@ -161,10 +158,7 @@ def allclose(a, b, equal_nan=False, **kwargs):
 
 def same_keys(a, b):
     def key(k):
-        if isinstance(k, str):
-            return (k, -1, -1, -1)
-        else:
-            return k
+        return (k, -1, -1, -1) if isinstance(k, str) else k
 
     return sorted(a.dask, key=key) == sorted(b.dask, key=key)
 
@@ -238,14 +232,15 @@ def assert_eq(a, b, check_shape=True, check_graph=True, check_meta=True, **kwarg
             b = np.array(b, dtype="O")
         bdt = getattr(b, "dtype", None)
 
-    if str(adt) != str(bdt):
-        # Ignore check for matching length of flexible dtypes, since Array._meta
-        # can't encode that information
-        if adt.type == bdt.type and not (adt.type == np.bytes_ or adt.type == np.str_):
-            diff = difflib.ndiff(str(adt).splitlines(), str(bdt).splitlines())
-            raise AssertionError(
-                "string repr are different" + os.linesep + os.linesep.join(diff)
-            )
+    if (
+        str(adt) != str(bdt)
+        and adt.type == bdt.type
+        and adt.type not in [np.bytes_, np.str_]
+    ):
+        diff = difflib.ndiff(str(adt).splitlines(), str(bdt).splitlines())
+        raise AssertionError(
+            f"string repr are different{os.linesep}{os.linesep.join(diff)}"
+        )
 
     try:
         assert a.shape == b.shape
@@ -344,7 +339,7 @@ def validate_axis(axis, ndim):
     if isinstance(axis, (tuple, list)):
         return tuple(validate_axis(ax, ndim) for ax in axis)
     if not isinstance(axis, numbers.Integral):
-        raise TypeError("Axis value must be an integer, got %s" % axis)
+        raise TypeError(f"Axis value must be an integer, got {axis}")
     if axis < -ndim or axis >= ndim:
         raise AxisError(
             "Axis %d is out of bounds for array of dimension %d" % (axis, ndim)

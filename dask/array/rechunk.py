@@ -85,14 +85,10 @@ def _intersect_1d(breaks):
     for idx in range(1, len(breaks)):
         label, br = breaks[idx]
         last_label, last_br = breaks[idx - 1]
-        if last_label == "n":
-            if ret_next:
-                ret.append(ret_next)
-                ret_next = []
-        if last_label == "o":
-            start = 0
-        else:
-            start = last_end
+        if last_label == "n" and ret_next:
+            ret.append(ret_next)
+            ret_next = []
+        start = 0 if last_label == "o" else last_end
         end = br - last_br + start
         last_end = end
         if br == last_br:
@@ -137,9 +133,9 @@ def _old_to_new(old_chunks, new_chunks):
     sums = [sum(o) for o in old_known]
     sums2 = [sum(n) for n in new_known]
 
-    if not sums == sums2:
+    if sums != sums2:
         raise ValueError("Cannot change dimensions from %r to %r" % (sums, sums2))
-    if not n_missing == n_missing2:
+    if n_missing != n_missing2:
         raise ValueError(
             "Chunks must be unchanging along unknown dimensions.\n\n"
             "A possible solution:\n  x.compute_chunk_sizes()"
@@ -177,8 +173,7 @@ def intersect_chunks(old_chunks, new_chunks):
     old_to_new = _old_to_new(old_chunks, new_chunks)
 
     cross1 = product(*old_to_new)
-    cross = chain(tuple(product(*cr)) for cr in cross1)
-    return cross
+    return chain(tuple(product(*cr)) for cr in cross1)
 
 
 def rechunk(x, chunks, threshold=None, block_size_limit=None):
@@ -232,7 +227,7 @@ def rechunk(x, chunks, threshold=None, block_size_limit=None):
     if chunks == x.chunks:
         return x
     ndim = x.ndim
-    if not len(chunks) == ndim:
+    if len(chunks) != ndim:
         raise ValueError("Provided chunks are not consistent with shape")
     new_shapes = tuple(map(sum, chunks))
 
@@ -260,12 +255,9 @@ def _largest_block_size(chunks):
 def estimate_graph_size(old_chunks, new_chunks):
     """ Estimate the graph size during a rechunk computation.
     """
-    # Estimate the number of intermediate blocks that will be produced
-    # (we don't use intersect_chunks() which is much more expensive)
-    crossed_size = reduce(
+    return reduce(
         mul, (len(oc) + len(nc) for oc, nc in zip(old_chunks, new_chunks))
     )
-    return crossed_size
 
 
 def divide_to_width(desired_chunks, max_width):
@@ -528,11 +520,11 @@ def _compute_rechunk(x, chunks):
 
     ndim = x.ndim
     crossed = intersect_chunks(x.chunks, chunks)
-    x2 = dict()
-    intermediates = dict()
+    x2 = {}
+    intermediates = {}
     token = tokenize(x, chunks)
-    merge_name = "rechunk-merge-" + token
-    split_name = "rechunk-split-" + token
+    merge_name = f"rechunk-merge-{token}"
+    split_name = f"rechunk-split-{token}"
     split_name_suffixes = count()
 
     # Pre-allocate old block references, to allow re-use and reduce the
