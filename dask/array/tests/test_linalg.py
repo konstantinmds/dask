@@ -853,10 +853,7 @@ def test_norm_any_slice(shape, chunks, norm, keepdims):
 
     for firstaxis in range(len(shape)):
         for secondaxis in range(len(shape)):
-            if firstaxis != secondaxis:
-                axis = (firstaxis, secondaxis)
-            else:
-                axis = firstaxis
+            axis = (firstaxis, secondaxis) if firstaxis != secondaxis else firstaxis
             a_r = np.linalg.norm(a, ord=norm, axis=axis, keepdims=keepdims)
             d_r = da.linalg.norm(d, ord=norm, axis=axis, keepdims=keepdims)
             assert_eq(a_r, d_r)
@@ -887,7 +884,7 @@ def test_norm_2dim(shape, chunks, axis, norm, keepdims):
     d = da.from_array(a, chunks=chunks)
 
     # Need one chunk on last dimension for svd.
-    if norm == "nuc" or norm == 2 or norm == -2:
+    if norm in ["nuc", 2, -2]:
         d = d.rechunk({-1: -1})
 
     a_r = np.linalg.norm(a, ord=norm, axis=axis, keepdims=keepdims)

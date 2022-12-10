@@ -31,8 +31,9 @@ def _parse_wrap_args(func, args, kwargs, shape):
     chunks = normalize_chunks(chunks, shape, dtype=dtype)
     name = kwargs.pop("name", None)
 
-    name = name or funcname(func) + "-" + tokenize(
-        func, shape, chunks, dtype, args, kwargs
+    name = (
+        name
+        or f"{funcname(func)}-{tokenize(func, shape, chunks, dtype, args, kwargs)}"
     )
 
     return {
@@ -121,7 +122,8 @@ def wrap(wrap_func, func, **kwargs):
         f = partial(wrap_func, func, **kwargs)
     else:
         f = partial(wrap_func, func_like, **kwargs)
-    template = """
+    if func.__doc__ is not None:
+        template = """
     Blocked variant of %(name)s
 
     Follows the signature of %(name)s exactly except that it also requires a
@@ -129,9 +131,8 @@ def wrap(wrap_func, func, **kwargs):
 
     Original signature follows below.
     """
-    if func.__doc__ is not None:
         f.__doc__ = template % {"name": func.__name__} + func.__doc__
-        f.__name__ = "blocked_" + func.__name__
+        f.__name__ = f"blocked_{func.__name__}"
     return f
 
 

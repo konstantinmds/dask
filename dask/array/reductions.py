@@ -213,7 +213,7 @@ def _tree_reduce(
     # Normalize split_every
     split_every = split_every or config.get("split_every", 4)
     if isinstance(split_every, dict):
-        split_every = dict((k, split_every.get(k, 2)) for k in axis)
+        split_every = {k: split_every.get(k, 2) for k in axis}
     elif isinstance(split_every, Integral):
         n = builtins.max(int(split_every ** (1 / (len(axis) or 1))), 2)
         split_every = dict.fromkeys(axis, n)
@@ -228,7 +228,7 @@ def _tree_reduce(
     func = partial(combine or aggregate, axis=axis, keepdims=True)
     if concatenate:
         func = compose(func, partial(_concatenate2, axes=axis))
-    for i in range(depth - 1):
+    for _ in range(depth - 1):
         x = partial_reduce(
             func,
             x,
@@ -280,7 +280,9 @@ def partial_reduce(
     ]
     keys = product(*map(range, map(len, parts)))
     out_chunks = [
-        tuple(1 for p in partition_all(split_every[i], c)) if i in split_every else c
+        tuple(1 for _ in partition_all(split_every[i], c))
+        if i in split_every
+        else c
         for (i, c) in enumerate(x.chunks)
     ]
     if not keepdims:
@@ -290,7 +292,7 @@ def partial_reduce(
         out_chunks = list(getter(out_chunks))
     dsk = {}
     for k, p in zip(keys, product(*parts)):
-        decided = dict((i, j[0]) for (i, j) in enumerate(p) if len(j) == 1)
+        decided = {i: j[0] for (i, j) in enumerate(p) if len(j) == 1}
         dummy = dict(i for i in enumerate(p) if i[0] not in decided)
         g = lol_tuples((x.name,), range(x.ndim), decided, dummy)
         dsk[(name,) + k] = (func, g)
@@ -311,17 +313,12 @@ def partial_reduce(
     # fall into the ValueError exception) and we have to rely on reshaping
     # the array according to len(out_chunks)
     if is_arraylike(meta) and meta.ndim != len(out_chunks):
-        if len(out_chunks) == 0:
-            meta = meta.sum()
-        else:
-            meta = meta.reshape((0,) * len(out_chunks))
-
+        meta = meta.reshape((0,) * len(out_chunks)) if out_chunks else meta.sum()
     if np.isscalar(meta):
         return Array(graph, name, out_chunks, dtype=dtype)
-    else:
-        with ignoring(AttributeError):
-            meta = meta.astype(dtype)
-        return Array(graph, name, out_chunks, meta=meta)
+    with ignoring(AttributeError):
+        meta = meta.astype(dtype)
+    return Array(graph, name, out_chunks, meta=meta)
 
 
 @wraps(chunk.sum)
@@ -330,7 +327,7 @@ def sum(a, axis=None, dtype=None, keepdims=False, split_every=None, out=None):
         dt = dtype
     else:
         dt = getattr(np.empty((1,), dtype=a.dtype).sum(), "dtype", object)
-    result = reduction(
+    return reduction(
         a,
         chunk.sum,
         chunk.sum,
@@ -340,7 +337,6 @@ def sum(a, axis=None, dtype=None, keepdims=False, split_every=None, out=None):
         split_every=split_every,
         out=out,
     )
-    return result
 
 
 @wraps(chunk.prod)
@@ -501,7 +497,7 @@ def numel(x, **kwargs):
 
     shape = x.shape
     keepdims = kwargs.get("keepdims", False)
-    axis = kwargs.get("axis", None)
+    axis = kwargs.get("axis")
     dtype = kwargs.get("dtype", np.float64)
 
     if axis is None:
@@ -554,7 +550,7 @@ def mean_combine(
     if not isinstance(pairs, list):
         pairs = [pairs]
 
-    ns = deepmap(lambda pair: pair["n"], pairs) if not computing_meta else pairs
+    ns = pairs if computing_meta else deepmap(lambda pair: pair["n"], pairs)
     n = _concatenate2(ns, axes=axis).sum(axis=axis, **kwargs)
 
     if computing_meta:
@@ -567,7 +563,7 @@ def mean_combine(
 
 
 def mean_agg(pairs, dtype="f8", axis=None, computing_meta=False, **kwargs):
-    ns = deepmap(lambda pair: pair["n"], pairs) if not computing_meta else pairs
+    ns = pairs if computing_meta else deepmap(lambda pair: pair["n"], pairs)
     n = _concatenate2(ns, axes=axis)
     n = np.sum(n, axis=axis, dtype=dtype, **kwargs)
 
@@ -665,7 +661,7 @@ def moment_combine(
     kwargs["dtype"] = dtype
     kwargs["keepdims"] = True
 
-    ns = deepmap(lambda pair: pair["n"], pairs) if not computing_meta else pairs
+    ns = pairs if computing_meta else deepmap(lambda pair: pair["n"], pairs)
     ns = _concatenate2(ns, axes=axis)
     n = ns.sum(axis=axis, **kwargs)
 
@@ -706,7 +702,7 @@ def moment_agg(
     keepdim_kw = kwargs.copy()
     keepdim_kw["keepdims"] = True
 
-    ns = deepmap(lambda pair: pair["n"], pairs) if not computing_meta else pairs
+    ns = pairs if computing_meta else deepmap(lambda pair: pair["n"], pairs)
     ns = _concatenate2(ns, axes=axis)
     n = ns.sum(axis=axis, **keepdim_kw)
 
@@ -968,10 +964,10 @@ def arg_reduction(x, chunk, combine, agg, axis=None, split_every=None, out=None)
         offset_info = pluck(axis[0], offsets)
 
     chunks = tuple((1,) * len(c) if i in axis else c for (i, c) in enumerate(x.chunks))
-    dsk = dict(
-        ((name,) + k, (chunk, (old,) + k, axis, off))
+    dsk = {
+        (name,) + k: (chunk, (old,) + k, axis, off)
         for (k, off) in zip(keys, offset_info)
-    )
+    }
     # The dtype of `tmp` doesn't actually matter, just need to provide something
     graph = HighLevelGraph.from_collections(name, dsk, dependencies=[x])
     tmp = Array(graph, name, chunks, dtype=x.dtype)
@@ -1068,7 +1064,7 @@ def cumreduction(func, binop, ident, x, axis=None, dtype=None, out=None):
     indices = list(
         product(*[range(nb) if i != axis else [0] for i, nb in enumerate(x.numblocks)])
     )
-    dsk = dict()
+    dsk = {}
     for ind in indices:
         shape = tuple(x.chunks[i][ii] if i != axis else 1 for i, ii in enumerate(ind))
         dsk[(name, "extra") + ind] = (np.full, shape, ident, m.dtype)
@@ -1228,11 +1224,7 @@ def argtopk(a, k, axis=-1, split_every=None):
     # index only.
     aggregate = partial(chunk.argtopk_aggregate, k=k)
 
-    if isinstance(axis, Number):
-        naxis = 1
-    else:
-        naxis = len(axis)
-
+    naxis = 1 if isinstance(axis, Number) else len(axis)
     meta = a._meta.astype(np.intp).reshape((0,) * (a.ndim - naxis + 1))
 
     return reduction(

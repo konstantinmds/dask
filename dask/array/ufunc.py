@@ -34,7 +34,7 @@ def wrap_elemwise(numpy_ufunc, array_wrap=False):
 
     def wrapped(*args, **kwargs):
         dsk = [arg for arg in args if hasattr(arg, "_elemwise")]
-        if len(dsk) > 0:
+        if dsk:
             is_dataframe = (
                 is_dataframe_like(dsk[0])
                 or is_series_like(dsk[0])
@@ -62,7 +62,7 @@ class da_frompyfunc(object):
         self.nin = nin
         self.nout = nout
         self._name = funcname(func)
-        self.__name__ = "frompyfunc-%s" % self._name
+        self.__name__ = f"frompyfunc-{self._name}"
 
     def __repr__(self):
         return "da.frompyfunc<%s, %d, %d>" % (self._name, self.nin, self.nout)
@@ -109,11 +109,10 @@ class ufunc(object):
     def __init__(self, ufunc):
         if not isinstance(ufunc, (np.ufunc, da_frompyfunc)):
             raise TypeError(
-                "must be an instance of `ufunc` or "
-                "`da_frompyfunc`, got `%s" % type(ufunc).__name__
+                f"must be an instance of `ufunc` or `da_frompyfunc`, got `{type(ufunc).__name__}"
             )
-        self._ufunc = ufunc
         self.__name__ = ufunc.__name__
+        self._ufunc = ufunc
         copy_docstring(self, ufunc)
 
     def __getattr__(self, key):
@@ -130,17 +129,15 @@ class ufunc(object):
         return repr(self._ufunc)
 
     def __call__(self, *args, **kwargs):
-        dsks = [arg for arg in args if hasattr(arg, "_elemwise")]
-        if len(dsks) > 0:
-            for dsk in dsks:
-                result = dsk._elemwise(self._ufunc, *args, **kwargs)
-                if type(result) != type(NotImplemented):
-                    return result
-            raise TypeError(
-                "Parameters of such types are not supported by " + self.__name__
-            )
-        else:
+        if not (dsks := [arg for arg in args if hasattr(arg, "_elemwise")]):
             return self._ufunc(*args, **kwargs)
+        for dsk in dsks:
+            result = dsk._elemwise(self._ufunc, *args, **kwargs)
+            if type(result) != type(NotImplemented):
+                return result
+        raise TypeError(
+            f"Parameters of such types are not supported by {self.__name__}"
+        )
 
     @copy_docstring(source=np.ufunc.outer)
     def outer(self, A, B, **kwargs):
@@ -188,8 +185,8 @@ class ufunc(object):
             B,
             B_inds,
             dtype=dtype,
-            token=self.__name__ + ".outer",
-            **kwargs
+            token=f"{self.__name__}.outer",
+            **kwargs,
         )
 
 
@@ -316,8 +313,8 @@ def angle(x, deg=0):
 def frexp(x):
     # Not actually object dtype, just need to specify something
     tmp = elemwise(np.frexp, x, dtype=object)
-    left = "mantissa-" + tmp.name
-    right = "exponent-" + tmp.name
+    left = f"mantissa-{tmp.name}"
+    right = f"exponent-{tmp.name}"
     ldsk = {
         (left,) + key[1:]: (getitem, key, 0)
         for key in core.flatten(tmp.__dask_keys__())
@@ -341,8 +338,8 @@ def frexp(x):
 def modf(x):
     # Not actually object dtype, just need to specify something
     tmp = elemwise(np.modf, x, dtype=object)
-    left = "modf1-" + tmp.name
-    right = "modf2-" + tmp.name
+    left = f"modf1-{tmp.name}"
+    right = f"modf2-{tmp.name}"
     ldsk = {
         (left,) + key[1:]: (getitem, key, 0)
         for key in core.flatten(tmp.__dask_keys__())

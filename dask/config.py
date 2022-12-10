@@ -54,10 +54,7 @@ def canonical_name(k, config):
 
     altk = k.replace("_", "-") if "_" in k else k.replace("-", "_")
 
-    if altk in config:
-        return altk
-
-    return k
+    return altk if altk in config else k
 
 
 def update(old, new, priority="new"):
@@ -96,9 +93,8 @@ def update(old, new, priority="new"):
             if k not in old or old[k] is None:
                 old[k] = {}
             update(old[k], v, priority=priority)
-        else:
-            if priority == "new" or k not in old:
-                old[k] = v
+        elif priority == "new" or k not in old:
+            old[k] = v
 
     return old
 
@@ -242,7 +238,9 @@ def ensure_file(source, destination=None, comment=True):
 
             if comment:
                 lines = [
-                    "# " + line if line.strip() and not line.startswith("#") else line
+                    f"# {line}"
+                    if line.strip() and not line.startswith("#")
+                    else line
                     for line in lines
                 ]
 

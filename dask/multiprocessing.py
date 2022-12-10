@@ -67,7 +67,7 @@ class RemoteException(Exception):
             return getattr(self.exception, key)
 
 
-exceptions = dict()
+exceptions = {}
 
 
 def remote_exception(exc, tb):

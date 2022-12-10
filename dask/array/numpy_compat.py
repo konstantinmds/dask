@@ -192,9 +192,7 @@ def _make_sliced_dtype_np_ge_16(dtype, index):
 
 
 def _make_sliced_dtype_np_lt_14(dtype, index):
-    # For numpy < 1.14
-    dt = np.dtype([(name, dtype[name]) for name in index])
-    return dt
+    return np.dtype([(name, dtype[name]) for name in index])
 
 
 if LooseVersion(np.__version__) >= LooseVersion("1.16.0") or LooseVersion(
@@ -261,9 +259,8 @@ class _Recurser(object):
         def f(x, **kwargs):
             if not self.recurse_if(x):
                 return f_map(x, **kwargs)
-            else:
-                next_kwargs = f_kwargs(**kwargs)
-                return f_reduce((f(xi, **next_kwargs) for xi in x), **kwargs)
+            next_kwargs = f_kwargs(**kwargs)
+            return f_reduce((f(xi, **next_kwargs) for xi in x), **kwargs)
 
         return f(x, **kwargs)
 
@@ -283,14 +280,10 @@ class _Recurser(object):
             return
         for i, xi in enumerate(x):
             # yield from ...
-            for v in self.walk(xi, index + (i,)):
-                yield v
+            yield from self.walk(xi, index + (i,))
 
 
-if _numpy_116:
-    _unravel_index_keyword = "shape"
-else:
-    _unravel_index_keyword = "dims"
+_unravel_index_keyword = "shape" if _numpy_116 else "dims"
 
 
 # Implementation taken directly from numpy:
@@ -312,8 +305,7 @@ def moveaxis(a, source, destination):
     for dest, src in sorted(zip(destination, source)):
         order.insert(dest, src)
 
-    result = a.transpose(order)
-    return result
+    return a.transpose(order)
 
 
 # Implementation adapted directly from numpy:
@@ -323,15 +315,15 @@ def rollaxis(a, axis, start=0):
     axis = np.core.numeric.normalize_axis_index(axis, n)
     if start < 0:
         start += n
-    msg = "'%s' arg requires %d <= %s < %d, but %d was passed in"
     if not (0 <= start < n + 1):
+        msg = "'%s' arg requires %d <= %s < %d, but %d was passed in"
         raise ValueError(msg % ("start", -n, "start", n + 1, start))
     if axis < start:
         # it's been removed
         start -= 1
     if axis == start:
         return a[...]
-    axes = list(range(0, n))
+    axes = list(range(n))
     axes.remove(axis)
     axes.insert(start, axis)
     return a.transpose(axes)

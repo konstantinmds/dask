@@ -221,10 +221,11 @@ def test_blockwise_non_blockwise_output():
         keys=list(dask.core.flatten([w.__dask_keys__(), z.__dask_keys__()])),
     )
     assert isinstance(dsk, HighLevelGraph)
-    assert (
-        len([layer for layer in z.dask.dicts.values() if isinstance(layer, Blockwise)])
-        >= 1
-    )
+    assert [
+        layer
+        for layer in z.dask.dicts.values()
+        if isinstance(layer, Blockwise)
+    ]
 
 
 def test_top_len():

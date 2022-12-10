@@ -104,11 +104,10 @@ def _maybe_slice(grouped, columns):
     Slice columns if grouped is pd.DataFrameGroupBy
     """
     # FIXME: update with better groupby object detection (i.e.: ngroups, get_group)
-    if "groupby" in type(grouped).__name__.lower():
-        if columns is not None:
-            if isinstance(columns, (tuple, list, set, pd.Index)):
-                columns = list(columns)
-            return grouped[columns]
+    if "groupby" in type(grouped).__name__.lower() and columns is not None:
+        if isinstance(columns, (tuple, list, set, pd.Index)):
+            columns = list(columns)
+        return grouped[columns]
     return grouped
 
 
@@ -131,32 +130,33 @@ def _groupby_raise_unaligned(df, **kwargs):
     unaligned key is generally a bad idea, we just error loudly in dask.
 
     For more information see pandas GH issue #15244 and Dask GH issue #1876."""
-    by = kwargs.get("by", None)
-    if by is not None and not _is_aligned(df, by):
-        msg = (
-            "Grouping by an unaligned index is unsafe and unsupported.\n"
-            "This can be caused by filtering only one of the object or\n"
-            "grouping key. For example, the following works in pandas,\n"
-            "but not in dask:\n"
-            "\n"
-            "df[df.foo < 0].groupby(df.bar)\n"
-            "\n"
-            "This can be avoided by either filtering beforehand, or\n"
-            "passing in the name of the column instead:\n"
-            "\n"
-            "df2 = df[df.foo < 0]\n"
-            "df2.groupby(df2.bar)\n"
-            "# or\n"
-            "df[df.foo < 0].groupby('bar')\n"
-            "\n"
-            "For more information see dask GH issue #1876."
-        )
-        raise ValueError(msg)
-    elif by is not None and len(by):
-        # since we're coming through apply, `by` will be a tuple.
-        # Pandas treats tuples as a single key, and lists as multiple keys
-        # We want multiple keys
-        kwargs.update(by=list(by))
+    by = kwargs.get("by")
+    if by is not None:
+        if not _is_aligned(df, by):
+            msg = (
+                "Grouping by an unaligned index is unsafe and unsupported.\n"
+                "This can be caused by filtering only one of the object or\n"
+                "grouping key. For example, the following works in pandas,\n"
+                "but not in dask:\n"
+                "\n"
+                "df[df.foo < 0].groupby(df.bar)\n"
+                "\n"
+                "This can be avoided by either filtering beforehand, or\n"
+                "passing in the name of the column instead:\n"
+                "\n"
+                "df2 = df[df.foo < 0]\n"
+                "df2.groupby(df2.bar)\n"
+                "# or\n"
+                "df[df.foo < 0].groupby('bar')\n"
+                "\n"
+                "For more information see dask GH issue #1876."
+            )
+            raise ValueError(msg)
+        elif len(by):
+            # since we're coming through apply, `by` will be a tuple.
+            # Pandas treats tuples as a single key, and lists as multiple keys
+            # We want multiple keys
+            kwargs.update(by=list(by))
     return df.groupby(**kwargs)
 
 
@@ -201,7 +201,7 @@ def _groupby_get_group(df, by_key, get_key, columns):
         if is_dataframe_like(df):
             # may be SeriesGroupBy
             df = df[columns]
-        return df.iloc[0:0]
+        return df.iloc[:0]
 
 
 ###############################################################
@@ -281,10 +281,9 @@ def _apply_chunk(df, *index, **kwargs):
 
     if is_series_like(df) or columns is None:
         return func(g, **kwargs)
-    else:
-        if isinstance(columns, (tuple, list, set, pd.Index)):
-            columns = list(columns)
-        return func(g[columns], **kwargs)
+    if isinstance(columns, (tuple, list, set, pd.Index)):
+        columns = list(columns)
+    return func(g[columns], **kwargs)
 
 
 def _var_chunk(df, *index):
@@ -343,17 +342,17 @@ def _cov_finalizer(df, cols, std=False):
         x = col_idx_mapping[i]
         y = col_idx_mapping[j]
         idx = x + num_cols * y
-        mul_col = "%s%s" % (i, j)
-        ni = df["%s-count" % i]
-        nj = df["%s-count" % j]
+        mul_col = f"{i}{j}"
+        ni = df[f"{i}-count"]
+        nj = df[f"{j}-count"]
 
         n = np.sqrt(ni * nj)
         div = n - 1
         div[div < 0] = 0
         val = (df[mul_col] - df[i] * df[j] / n).values[0] / div.values[0]
         if std:
-            ii = "%s%s" % (i, i)
-            jj = "%s%s" % (j, j)
+            ii = f"{i}{i}"
+            jj = f"{j}{j}"
             std_val_i = (df[ii] - (df[i] ** 2) / ni).values[0] / div.values[0]
             std_val_j = (df[jj] - (df[j] ** 2) / nj).values[0] / div.values[0]
             val = val / np.sqrt(std_val_i * std_val_j)
@@ -376,7 +375,7 @@ def _mul_cols(df, cols):
     """
     _df = type(df)()
     for i, j in it.combinations_with_replacement(cols, 2):
-        col = "%s%s" % (i, j)
+        col = f"{i}{j}"
         _df[col] = df[i] * df[j]
     return _df
 
@@ -418,7 +417,7 @@ def _cov_chunk(df, *index):
 
     level = len(index)
     mul = g.apply(_mul_cols, cols=cols).reset_index(level=level, drop=True)
-    n = g[x.columns].count().rename(columns=lambda c: "{}-count".format(c))
+    n = g[x.columns].count().rename(columns=lambda c: f"{c}-count")
     return (x, mul, n, col_mapping)
 
 
@@ -448,14 +447,14 @@ def _cov_agg(_t, levels, ddof, std=False):
 
     inv_col_mapping = {v: k for k, v in col_mapping.items()}
     idx_vals = result.index.names
-    idx_mapping = list()
+    idx_mapping = []
 
     # when index is None we probably have selected a particular column
     # df.groupby('a')[['b']].cov()
     if len(idx_vals) == 1 and all(n is None for n in idx_vals):
         idx_vals = list(set(inv_col_mapping.keys()) - set(total_sums.columns))
 
-    for idx, val in enumerate(idx_vals):
+    for val in idx_vals:
         idx_name = inv_col_mapping.get(val, val)
         idx_mapping.append(idx_name)
 
@@ -614,25 +613,24 @@ def _normalize_spec(spec, non_group_columns):
 
     res = []
 
-    if isinstance(spec, dict):
-        for input_column, subspec in spec.items():
-            if isinstance(subspec, dict):
-                res.extend(
-                    ((input_column, result_column), func, input_column)
-                    for result_column, func in subspec.items()
-                )
+    if not isinstance(spec, dict):
+        raise ValueError(f"unsupported agg spec of type {type(spec)}")
 
-            else:
-                if not isinstance(subspec, list):
-                    subspec = [subspec]
+    for input_column, subspec in spec.items():
+        if isinstance(subspec, dict):
+            res.extend(
+                ((input_column, result_column), func, input_column)
+                for result_column, func in subspec.items()
+            )
 
-                res.extend(
-                    ((input_column, funcname(func)), func, input_column)
-                    for func in subspec
-                )
+        else:
+            if not isinstance(subspec, list):
+                subspec = [subspec]
 
-    else:
-        raise ValueError("unsupported agg spec of type {}".format(type(spec)))
+            res.extend(
+                ((input_column, funcname(func)), func, input_column)
+                for func in subspec
+            )
 
     compounds = (list, tuple, dict)
     use_flat_columns = not any(
@@ -678,7 +676,7 @@ def _build_agg_args(spec):
 
     for funcs in by_name.values():
         if len(funcs) != 1:
-            raise ValueError("conflicting aggregation functions: {}".format(funcs))
+            raise ValueError(f"conflicting aggregation functions: {funcs}")
 
     chunks = {}
     aggs = {}
@@ -691,8 +689,8 @@ def _build_agg_args(spec):
         impls = _build_agg_args_single(result_column, func, input_column)
 
         # overwrite existing result-columns, generate intermediates only once
-        chunks.update((spec[0], spec) for spec in impls["chunk_funcs"])
-        aggs.update((spec[0], spec) for spec in impls["aggregate_funcs"])
+        chunks |= ((spec[0], spec) for spec in impls["chunk_funcs"])
+        aggs |= ((spec[0], spec) for spec in impls["aggregate_funcs"])
 
         finalizers.append(impls["finalizer"])
 
@@ -714,7 +712,7 @@ def _build_agg_args_single(result_column, func, input_column):
         "prod": (M.prod, M.prod),
     }
 
-    if func in simple_impl.keys():
+    if func in simple_impl:
         return _build_agg_args_simple(
             result_column, func, input_column, simple_impl[func]
         )
@@ -732,7 +730,7 @@ def _build_agg_args_single(result_column, func, input_column):
         return _build_agg_args_custom(result_column, func, input_column)
 
     else:
-        raise ValueError("unknown aggregate {}".format(func))
+        raise ValueError(f"unknown aggregate {func}")
 
 
 def _build_agg_args_simple(result_column, func, input_column, impl_pair):
@@ -754,7 +752,7 @@ def _build_agg_args_simple(result_column, func, input_column, impl_pair):
                 dict(column=intermediate, func=agg_impl),
             )
         ],
-        finalizer=(result_column, itemgetter(intermediate), dict()),
+        finalizer=(result_column, itemgetter(intermediate), {}),
     )
 
 
@@ -815,7 +813,7 @@ def _build_agg_args_custom(result_column, func, input_column):
     col = _make_agg_id(funcname(func), input_column)
 
     if func.finalize is None:
-        finalizer = (result_column, operator.itemgetter(col), dict())
+        finalizer = result_column, operator.itemgetter(col), {}
 
     else:
         finalizer = (
@@ -873,7 +871,7 @@ def _groupby_apply_funcs(df, *index, **kwargs):
 
         if isinstance(r, tuple):
             for idx, s in enumerate(r):
-                result["{}-{}".format(result_column, idx)] = s
+                result[f"{result_column}-{idx}"] = s
 
         else:
             result[result_column] = r
@@ -903,10 +901,7 @@ def _agg_finalize(df, aggregate_funcs, finalize_funcs, level):
 
 
 def _apply_func_to_column(df_like, column, func):
-    if column is None:
-        return func(df_like)
-
-    return func(df_like[column])
+    return func(df_like) if column is None else func(df_like[column])
 
 
 def _apply_func_to_columns(df_like, prefix, func):
@@ -1062,16 +1057,18 @@ class _GroupBy(object):
         levels = _determine_levels(self.index)
 
         return aca(
-            [self.obj, self.index]
-            if not isinstance(self.index, list)
-            else [self.obj] + self.index,
+            [self.obj] + self.index
+            if isinstance(self.index, list)
+            else [self.obj, self.index],
             chunk=_apply_chunk,
             chunk_kwargs=dict(chunk=func, columns=columns, **chunk_kwargs),
             aggregate=_groupby_aggregate,
             meta=meta,
             token=token,
             split_every=split_every,
-            aggregate_kwargs=dict(aggfunc=aggfunc, levels=levels, **aggregate_kwargs),
+            aggregate_kwargs=dict(
+                aggfunc=aggfunc, levels=levels, **aggregate_kwargs
+            ),
             split_out=split_out,
             split_out_setup=split_out_on_index,
         )
@@ -1314,9 +1311,9 @@ class _GroupBy(object):
     def var(self, ddof=1, split_every=None, split_out=1):
         levels = _determine_levels(self.index)
         result = aca(
-            [self.obj, self.index]
-            if not isinstance(self.index, list)
-            else [self.obj] + self.index,
+            [self.obj] + self.index
+            if isinstance(self.index, list)
+            else [self.obj, self.index],
             chunk=_var_chunk,
             aggregate=_var_agg,
             combine=_var_combine,
@@ -1338,8 +1335,7 @@ class _GroupBy(object):
     @derived_from(pd.core.groupby.GroupBy)
     def std(self, ddof=1, split_every=None, split_out=1):
         v = self.var(ddof, split_every=split_every, split_out=split_out)
-        result = map_partitions(np.sqrt, v, meta=v)
-        return result
+        return map_partitions(np.sqrt, v, meta=v)
 
     @derived_from(pd.DataFrame)
     def corr(self, ddof=1, split_every=None, split_out=1):
@@ -1363,8 +1359,8 @@ class _GroupBy(object):
 
         levels = _determine_levels(self.index)
 
-        is_mask = any(is_series_like(s) for s in self.index)
         if self._slice:
+            is_mask = any(is_series_like(s) for s in self.index)
             if is_mask:
                 self.obj = self.obj[self._slice]
             else:
@@ -1372,9 +1368,9 @@ class _GroupBy(object):
                 self.obj = self.obj[sliced_plus]
 
         result = aca(
-            [self.obj, self.index]
-            if not isinstance(self.index, list)
-            else [self.obj] + self.index,
+            [self.obj] + self.index
+            if isinstance(self.index, list)
+            else [self.obj, self.index],
             chunk=_cov_chunk,
             aggregate=_cov_agg,
             combine=_cov_combine,
@@ -1470,7 +1466,7 @@ class _GroupBy(object):
                 ]
 
         else:
-            raise ValueError("aggregate on unknown object {}".format(self.obj))
+            raise ValueError(f"aggregate on unknown object {self.obj}")
 
         chunk_funcs, aggregate_funcs, finalizers = _build_agg_args(spec)
 
@@ -1479,12 +1475,11 @@ class _GroupBy(object):
         else:
             levels = 0
 
-        if not isinstance(self.index, list):
-            chunk_args = [self.obj, self.index]
-
-        else:
-            chunk_args = [self.obj] + self.index
-
+        chunk_args = (
+            [self.obj] + self.index
+            if isinstance(self.index, list)
+            else [self.obj, self.index]
+        )
         return aca(
             chunk_args,
             chunk=_groupby_apply_funcs,
@@ -1574,7 +1569,7 @@ class _GroupBy(object):
 
         # Perform embarrassingly parallel groupby-apply
         kwargs["meta"] = meta
-        df3 = map_partitions(
+        return map_partitions(
             _groupby_slice_apply,
             df2,
             index,
@@ -1585,8 +1580,6 @@ class _GroupBy(object):
             group_keys=self.group_keys,
             **kwargs
         )
-
-        return df3
 
     @insert_meta_param_description(pad=12)
     def transform(self, func, *args, **kwargs):
@@ -1661,7 +1654,7 @@ class _GroupBy(object):
 
         # Perform embarrassingly parallel groupby-transform
         kwargs["meta"] = meta
-        df3 = map_partitions(
+        return map_partitions(
             _groupby_slice_transform,
             df2,
             index,
@@ -1672,8 +1665,6 @@ class _GroupBy(object):
             group_keys=self.group_keys,
             **kwargs
         )
-
-        return df3
 
 
 class DataFrameGroupBy(_GroupBy):
@@ -1753,9 +1744,9 @@ class SeriesGroupBy(_GroupBy):
             chunk = _nunique_series_chunk
 
         return aca(
-            [self.obj, self.index]
-            if not isinstance(self.index, list)
-            else [self.obj] + self.index,
+            [self.obj] + self.index
+            if isinstance(self.index, list)
+            else [self.obj, self.index],
             chunk=chunk,
             aggregate=_nunique_df_aggregate,
             combine=_nunique_df_combine,

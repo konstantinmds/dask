@@ -75,7 +75,7 @@ def _generate_mimesis(field, schema_description, records_per_partition, seed):
 
     field = Field(seed=seed, **field)
     schema = Schema(schema=lambda: schema_description(field))
-    for i in range(records_per_partition):
+    for _ in range(records_per_partition):
         yield schema.create(iterations=1)[0]
 
 
@@ -112,9 +112,7 @@ def _make_mimesis(field, schema, npartitions, records_per_partition, seed=None):
 
     seeds = db.core.random_state_data_python(npartitions, seed)
 
-    name = "mimesis-" + tokenize(
-        field, schema, npartitions, records_per_partition, seed
-    )
+    name = f"mimesis-{tokenize(field, schema, npartitions, records_per_partition, seed)}"
     dsk = {
         (name, i): (_generate_mimesis, field, schema, records_per_partition, seed)
         for i, seed in enumerate(seeds)

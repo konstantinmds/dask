@@ -8,8 +8,7 @@ import dask.array as da
 from dask.array.numpy_compat import _numpy_117
 from dask.array.utils import assert_eq, IS_NEP18_ACTIVE
 
-sparse = pytest.importorskip("sparse")
-if sparse:
+if sparse := pytest.importorskip("sparse"):
     # Test failures on older versions of Numba.
     # Conda-Forge provides 0.35.0 on windows right now, causing failures like
     # searchsorted() got an unexpected keyword argument 'side'

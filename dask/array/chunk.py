@@ -39,11 +39,7 @@ def keepdims_wrapper(a_callable):
 
         r_slice = tuple()
         for each_axis in range(x.ndim):
-            if each_axis in axes:
-                r_slice += (None,)
-            else:
-                r_slice += (slice(None),)
-
+            r_slice += (None, ) if each_axis in axes else (slice(None), )
         r = r[r_slice]
 
         return r

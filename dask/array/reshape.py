@@ -16,8 +16,8 @@ def reshape_rechunk(inshape, outshape, inchunks):
     assert all(isinstance(c, tuple) for c in inchunks)
     ii = len(inshape) - 1
     oi = len(outshape) - 1
-    result_inchunks = [None for i in range(len(inshape))]
-    result_outchunks = [None for i in range(len(outshape))]
+    result_inchunks = [None for _ in range(len(inshape))]
+    result_outchunks = [None for _ in range(len(outshape))]
 
     while ii >= 0 or oi >= 0:
         if inshape[ii] == outshape[oi]:
@@ -127,8 +127,7 @@ def contract_tuple(chunks, factor):
         chunk += residual
         div = chunk // factor
         residual = chunk % factor
-        good = factor * div
-        if good:
+        if good := factor * div:
             out.append(good)
     return tuple(out)
 
@@ -182,7 +181,7 @@ def reshape(x, shape):
 
     meta = meta_from_array(x, len(shape))
 
-    name = "reshape-" + tokenize(x, shape)
+    name = f"reshape-{tokenize(x, shape)}"
 
     if x.npartitions == 1:
         key = next(flatten(x.__dask_keys__()))

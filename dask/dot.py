@@ -114,13 +114,12 @@ def box_label(key):
     >>> box_label('x')
     ''
     """
-    if isinstance(key, tuple):
-        key = key[1:]
-        if len(key) == 1:
-            [key] = key
-        return str(key)
-    else:
+    if not isinstance(key, tuple):
         return ""
+    key = key[1:]
+    if len(key) == 1:
+        [key] = key
+    return str(key)
 
 
 def to_graphviz(
@@ -211,7 +210,7 @@ def _get_display_cls(format):
     elif format == "svg":
         return display.SVG
     else:
-        raise ValueError("Unknown format '%s' passed to `dot_graph`" % format)
+        raise ValueError(f"Unknown format '{format}' passed to `dot_graph`")
 
 
 def dot_graph(dsk, filename="mydask", format=None, **kwargs):

@@ -51,7 +51,7 @@ class Accessor(object):
 
     def _property_map(self, attr):
         meta = self._delegate_property(self._series._meta, self._accessor_name, attr)
-        token = "%s-%s" % (self._accessor_name, attr)
+        token = f"{self._accessor_name}-{attr}"
         return self._series.map_partitions(
             self._delegate_property, self._accessor_name, attr, token=token, meta=meta
         )
@@ -63,7 +63,7 @@ class Accessor(object):
             meta = self._delegate_method(
                 self._series._meta_nonempty, self._accessor_name, attr, args, kwargs
             )
-        token = "%s-%s" % (self._accessor_name, attr)
+        token = f"{self._accessor_name}-{attr}"
         return self._series.map_partitions(
             self._delegate_method,
             self._accessor_name,
@@ -85,13 +85,12 @@ class Accessor(object):
         return list(o)
 
     def __getattr__(self, key):
-        if key in self._delegates:
-            if callable(getattr(self._meta, key)):
-                return partial(self._function_map, key)
-            else:
-                return self._property_map(key)
-        else:
+        if key not in self._delegates:
             raise AttributeError(key)
+        if callable(getattr(self._meta, key)):
+            return partial(self._function_map, key)
+        else:
+            return self._property_map(key)
 
 
 class DatetimeAccessor(Accessor):
@@ -126,9 +125,8 @@ class StringAccessor(Accessor):
                     "To use the expand parameter you must specify the number of "
                     "expected output columns with the n= parameter"
                 )
-            else:
-                meta = type(self._series._meta)([" ".join(["a"] * 2 * n)])
-                meta = meta.str.split(n=n, expand=expand, pat=pat)
+            meta = type(self._series._meta)([" ".join(["a"] * 2 * n)])
+            meta = meta.str.split(n=n, expand=expand, pat=pat)
         else:
             meta = (self._series.name, object)
         return self._function_map("split", pat=pat, n=n, expand=expand, meta=meta)

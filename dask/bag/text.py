@@ -107,16 +107,12 @@ def read_text(
     if not blocks:
         raise ValueError("No files found", urlpath)
 
-    if not collection:
-        return blocks
-    else:
-        return from_delayed(blocks)
+    return from_delayed(blocks) if collection else blocks
 
 
 def file_to_blocks(lazy_file):
     with lazy_file as f:
-        for line in f:
-            yield line
+        yield from f
 
 
 def decode(block, encoding, errors):

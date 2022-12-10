@@ -23,7 +23,7 @@ packages = ['dask', 'dask.array', 'dask.bag', 'dask.bytes',
             'dask.dataframe', 'dask.dataframe.io', 'dask.dataframe.tseries',
             'dask.diagnostics']
 
-tests = [p + '.tests' for p in packages]
+tests = [f'{p}.tests' for p in packages]
 
 # Only include pytest-runner in setup_requires if we're invoking tests
 if {'pytest', 'test', 'ptr'}.intersection(sys.argv):

@@ -217,7 +217,7 @@ def test_numblocks_suppoorts_singleton_block_dims():
 
 
 def test_keys():
-    dsk = dict((("x", i, j), ()) for i in range(5) for j in range(6))
+    dsk = {("x", i, j): () for i in range(5) for j in range(6)}
     dx = Array(dsk, "x", chunks=(10, 10), shape=(50, 60), dtype="f8")
     assert dx.__dask_keys__() == [[(dx.name, i, j) for j in range(6)] for i in range(5)]
     # Cache works
@@ -1472,7 +1472,7 @@ def test_coerce():
     d1 = da.from_array(np.array([1]), chunks=(1,))
     with dask.config.set(scheduler="sync"):
         for d in d0, d1:
-            assert bool(d) is True
+            assert bool(d)
             assert int(d) == 1
             assert float(d) == 1.0
             assert complex(d) == complex(1)
@@ -1488,7 +1488,7 @@ def test_bool():
     darr = da.from_array(arr, chunks=(10, 10))
     with pytest.raises(ValueError):
         bool(darr)
-        bool(darr == darr)
+        darr == darr
 
 
 def test_store_kwargs():
@@ -1562,7 +1562,7 @@ def test_store_delayed_target():
 
         assert st is not None
         assert isinstance(st, tuple)
-        assert all([isinstance(v, np.ndarray) for v in st])
+        assert all(isinstance(v, np.ndarray) for v in st)
         assert_eq(at, a)
         assert_eq(bt, b)
         assert_eq(st[0], a)
@@ -1603,7 +1603,7 @@ def test_store_regions():
     v = store([a, b], [at, bt], regions=region, compute=False)
     assert isinstance(v, Delayed)
     assert (at == 0).all() and (bt[region] == 0).all()
-    assert all([ev is None for ev in v.compute()])
+    assert all(ev is None for ev in v.compute())
     assert (at[region] == 2).all() and (bt[region] == 3).all()
     assert not (bt == 3).all() and not (bt == 0).all()
     assert not (at == 2).all() and not (at == 0).all()
@@ -1614,7 +1614,7 @@ def test_store_regions():
     v = store([a, b], [at, bt], regions=[region, region], compute=False)
     assert isinstance(v, Delayed)
     assert (at == 0).all() and (bt[region] == 0).all()
-    assert all([ev is None for ev in v.compute()])
+    assert all(ev is None for ev in v.compute())
     assert (at[region] == 2).all() and (bt[region] == 3).all()
     assert not (bt == 3).all() and not (bt == 0).all()
     assert not (at == 2).all() and not (at == 0).all()
@@ -1627,7 +1627,7 @@ def test_store_regions():
             [a, b], [at, bt], regions=region, compute=st_compute, return_stored=True
         )
         assert isinstance(v, tuple)
-        assert all([isinstance(e, da.Array) for e in v])
+        assert all(isinstance(e, da.Array) for e in v)
         if st_compute:
             assert all(not any(dask.core.get_deps(e.dask)[0].values()) for e in v)
         else:
@@ -1660,7 +1660,7 @@ def test_store_regions():
             return_stored=True,
         )
         assert isinstance(v, tuple)
-        assert all([isinstance(e, da.Array) for e in v])
+        assert all(isinstance(e, da.Array) for e in v)
         if st_compute:
             assert all(not any(dask.core.get_deps(e.dask)[0].values()) for e in v)
         else:
@@ -1692,7 +1692,7 @@ def test_store_compute_false():
     v = store([a, b], [at, bt], compute=False)
     assert isinstance(v, Delayed)
     assert (at == 0).all() and (bt == 0).all()
-    assert all([ev is None for ev in v.compute()])
+    assert all(ev is None for ev in v.compute())
     assert (at == 2).all() and (bt == 3).all()
 
     at = np.zeros(shape=(4, 4))
@@ -1769,8 +1769,8 @@ def test_store_locks():
     v = store([a, b], [at, bt], compute=False, lock=lock)
     assert isinstance(v, Delayed)
     dsk = v.dask
-    locks = set(vv for v in dsk.values() for vv in v if isinstance(vv, _Lock))
-    assert locks == set([lock])
+    locks = {vv for v in dsk.values() for vv in v if isinstance(vv, _Lock)}
+    assert locks == {lock}
 
     # Ensure same lock applies over multiple stores
     at = NonthreadSafeStore()
@@ -2015,12 +2015,12 @@ def test_arithmetic():
     assert_eq(2 // b, 2 // y)
     assert_eq(2 ** b, 2 ** y)
     assert_eq(2 % b, 2 % y)
-    assert_eq(2 > b, 2 > y)
-    assert_eq(2 < b, 2 < y)
-    assert_eq(2 >= b, 2 >= y)
-    assert_eq(2 <= b, 2 <= y)
-    assert_eq(2 == b, 2 == y)
-    assert_eq(2 != b, 2 != y)
+    assert_eq(b < 2, y < 2)
+    assert_eq(b > 2, y > 2)
+    assert_eq(b <= 2, y <= 2)
+    assert_eq(b >= 2, y >= 2)
+    assert_eq(b == 2, y == 2)
+    assert_eq(b != 2, y != 2)
 
     assert_eq(-a, -x)
     assert_eq(abs(a), abs(x))
@@ -2202,7 +2202,7 @@ def test_from_array_with_lock():
     tasks = [v for k, v in d.dask.items() if k[0] == d.name]
 
     assert hasattr(tasks[0][4], "acquire")
-    assert len(set(task[4] for task in tasks)) == 1
+    assert len({task[4] for task in tasks}) == 1
 
     assert_eq(d, x)
 
@@ -2275,11 +2275,7 @@ def test_from_array_list(x):
 def test_from_array_scalar(type_):
     """Python and numpy scalars are automatically converted to ndarray
     """
-    if type_ == np.datetime64:
-        x = np.datetime64("2000-01-01")
-    else:
-        x = type_(1)
-
+    x = np.datetime64("2000-01-01") if type_ == np.datetime64 else type_(1)
     dx = da.from_array(x, chunks=-1)
     assert_eq(np.array(x), dx)
     assert isinstance(dx.dask[dx.name,], np.ndarray)
@@ -2296,8 +2292,8 @@ def test_from_array_no_asarray(asarray, cls):
     x = np.matrix(np.arange(100).reshape((10, 10)))
     dx = da.from_array(x, chunks=(5, 5), asarray=asarray)
     assert_chunks_are_of_type(dx)
-    assert_chunks_are_of_type(dx[0:5])
-    assert_chunks_are_of_type(dx[0:5][:, 0])
+    assert_chunks_are_of_type(dx[:5])
+    assert_chunks_are_of_type(dx[:5][:, 0])
 
 
 def test_from_array_getitem():
@@ -2653,7 +2649,7 @@ def test_slice_with_floats():
     with pytest.raises(IndexError):
         d[1.5]
     with pytest.raises(IndexError):
-        d[0:1.5]
+        d[:1.5]
     with pytest.raises(IndexError):
         d[[1, 1.5]]
 
@@ -2673,7 +2669,7 @@ def test_slice_with_integer_types():
 def test_index_with_integer_types():
     x = np.arange(10)
     dx = da.from_array(x, chunks=5)
-    inds = int(3)
+    inds = 3
     assert_eq(dx[inds], x[inds])
 
     inds = np.int64(3)
@@ -2747,7 +2743,7 @@ def test_vindex_identity():
     assert x is x.vindex[:a]
     pytest.raises(IndexError, lambda: x.vindex[: a - 1])
     pytest.raises(IndexError, lambda: x.vindex[1:])
-    pytest.raises(IndexError, lambda: x.vindex[0:a:2])
+    pytest.raises(IndexError, lambda: x.vindex[:a:2])
 
     x = rng.random((a, b), chunks=(a // 2, b // 2))
     assert x is x.vindex[:, :]
@@ -3134,7 +3130,7 @@ def test_from_array_names():
     d = da.from_array(x, chunks=2)
 
     names = countby(key_split, d.dask)
-    assert set(names.values()) == set([1, 5])
+    assert set(names.values()) == {1, 5}
 
 
 def test_array_picklable():

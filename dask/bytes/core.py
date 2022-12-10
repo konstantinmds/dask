@@ -93,7 +93,7 @@ def read_bytes(
     fs, fs_token, paths = get_fs_token_paths(urlpath, mode="rb", storage_options=kwargs)
 
     if len(paths) == 0:
-        raise IOError("%s resolved to no files" % urlpath)
+        raise IOError(f"{urlpath} resolved to no files")
 
     if blocksize is not None:
         if isinstance(blocksize, str):
@@ -109,10 +109,7 @@ def read_bytes(
         offsets = []
         lengths = []
         for path in paths:
-            if compression == "infer":
-                comp = infer_compression(path)
-            else:
-                comp = compression
+            comp = infer_compression(path) if compression == "infer" else compression
             if comp is not None:
                 raise ValueError(
                     "Cannot do chunked reads on compressed files. "
@@ -137,7 +134,7 @@ def read_bytes(
     out = []
     for path, offset, length in zip(paths, offsets, lengths):
         token = tokenize(fs_token, delimiter, path, fs.ukey(path), compression, offset)
-        keys = ["read-block-%s-%s" % (o, token) for o in offset]
+        keys = [f"read-block-{o}-{token}" for o in offset]
         values = [
             delayed_read(
                 OpenFile(fs, path, compression=compression),
@@ -172,9 +169,7 @@ def read_bytes(
                         break
                     sample_buff = sample_buff + new
                 sample = sample_buff
-    if include_path:
-        return sample, out, paths
-    return sample, out
+    return (sample, out, paths) if include_path else (sample, out)
 
 
 def read_block_from_file(lazy_file, off, bs, delimiter):

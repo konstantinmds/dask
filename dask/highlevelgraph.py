@@ -115,24 +115,22 @@ class HighLevelGraph(Mapping):
         ...     return new_collection(name, graph)
         """
         layers = {name: layer}
-        deps = {}
-        deps[name] = set()
+        deps = {name: set()}
         for collection in toolz.unique(dependencies, key=id):
-            if is_dask_collection(collection):
-                graph = collection.__dask_graph__()
-                if isinstance(graph, HighLevelGraph):
-                    layers.update(graph.layers)
-                    deps.update(graph.dependencies)
-                    with ignoring(AttributeError):
-                        deps[name] |= set(collection.__dask_layers__())
-                else:
-                    key = id(graph)
-                    layers[key] = graph
-                    deps[name].add(key)
-                    deps[key] = set()
-            else:
+            if not is_dask_collection(collection):
                 raise TypeError(type(collection))
 
+            graph = collection.__dask_graph__()
+            if isinstance(graph, HighLevelGraph):
+                layers |= graph.layers
+                deps |= graph.dependencies
+                with ignoring(AttributeError):
+                    deps[name] |= set(collection.__dask_layers__())
+            else:
+                key = id(graph)
+                layers[key] = graph
+                deps[name].add(key)
+                deps[key] = set()
         return cls(layers, deps)
 
     def __getitem__(self, key):
@@ -169,8 +167,8 @@ class HighLevelGraph(Mapping):
         dependencies = {}
         for g in graphs:
             if isinstance(g, HighLevelGraph):
-                layers.update(g.layers)
-                dependencies.update(g.dependencies)
+                layers |= g.layers
+                dependencies |= g.dependencies
             elif isinstance(g, Mapping):
                 layers[id(g)] = g
                 dependencies[id(g)] = set()

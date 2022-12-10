@@ -25,16 +25,13 @@ __all__ = ["Delayed", "delayed"]
 
 def unzip(ls, nout):
     """Unzip a list of lists into ``nout`` outputs."""
-    out = list(zip(*ls))
-    if not out:
-        out = [()] * nout
-    return out
+    return list(zip(*ls)) or [()] * nout
 
 
 def finalize(collection):
     assert is_dask_collection(collection)
 
-    name = "finalize-" + tokenize(collection)
+    name = f"finalize-{tokenize(collection)}"
     keys = collection.__dask_keys__()
     finalize, args = collection.__dask_postcompute__()
     layer = {name: (finalize, keys) + args}
@@ -159,12 +156,12 @@ def to_task_dask(expr):
         return expr.key, expr.dask
 
     if is_dask_collection(expr):
-        name = "finalize-" + tokenize(expr, pure=True)
+        name = f"finalize-{tokenize(expr, pure=True)}"
         keys = expr.__dask_keys__()
         opt = getattr(expr, "__dask_optimize__", dont_optimize)
         finalize, args = expr.__dask_postcompute__()
         dsk = {name: (finalize, keys) + args}
-        dsk.update(opt(expr.__dask_graph__(), keys))
+        dsk |= opt(expr.__dask_graph__(), keys)
         return name, dsk
 
     if isinstance(expr, Iterator):
@@ -212,10 +209,7 @@ def tokenize(*args, **kwargs):
     if pure is None:
         pure = config.get("delayed_pure", False)
 
-    if pure:
-        return _tokenize(*args, **kwargs)
-    else:
-        return str(uuid.uuid4())
+    return _tokenize(*args, **kwargs) if pure else str(uuid.uuid4())
 
 
 @curry
@@ -415,17 +409,15 @@ def delayed(obj, name=None, pure=None, nout=None, traverse=True):
         collections = set()
 
     if task is obj:
-        if not (nout is None or (type(nout) is int and nout >= 0)):
-            raise ValueError(
-                "nout must be None or a non-negative integer, got %s" % nout
-            )
+        if nout is not None and (type(nout) is not int or nout < 0):
+            raise ValueError(f"nout must be None or a non-negative integer, got {nout}")
         if not name:
             try:
                 prefix = obj.__name__
             except AttributeError:
                 prefix = type(obj).__name__
             token = tokenize(obj, nout, pure=pure)
-            name = "%s-%s" % (prefix, token)
+            name = f"{prefix}-{token}"
         return DelayedLeaf(obj, name, pure=pure, nout=nout)
     else:
         if not name:
@@ -547,9 +539,7 @@ class Delayed(DaskMethodsMixin, OperatorMethodMixin):
     __nonzero__ = __bool__
 
     def __get__(self, instance, cls):
-        if instance is None:
-            return self
-        return types.MethodType(self, instance)
+        return self if instance is None else types.MethodType(self, instance)
 
     @classmethod
     def _get_binary_operator(cls, op, inv=False):
@@ -624,7 +614,7 @@ class DelayedAttr(Delayed):
         # `x.dtype().dtype()` is called (which shouldn't ever show up in real
         # code). See https://github.com/dask/dask/pull/4374#issuecomment-454381465
         if attr == "dtype" and self._attr == "dtype":
-            raise AttributeError("Attribute %s not found" % attr)
+            raise AttributeError(f"Attribute {attr} not found")
         return super(DelayedAttr, self).__getattr__(attr)
 
     @property

@@ -47,10 +47,7 @@ class Traverser(object):
 
     def __init__(self, term, stack=None):
         self.term = term
-        if not stack:
-            self._stack = deque([END])
-        else:
-            self._stack = stack
+        self._stack = stack or deque([END])
 
     def __iter__(self):
         while self.current is not END:
@@ -68,13 +65,12 @@ class Traverser(object):
     def next(self):
         """Proceed to the next term in the preorder traversal."""
 
-        subterms = args(self.term)
-        if not subterms:
-            # No subterms, pop off stack
-            self.term = self._stack.pop()
-        else:
+        if subterms := args(self.term):
             self.term = subterms[0]
             self._stack.extend(reversed(subterms[1:]))
+        else:
+            # No subterms, pop off stack
+            self.term = self._stack.pop()
 
     @property
     def current(self):
@@ -110,8 +106,8 @@ class Node(tuple):
     __slots__ = ()
 
     def __new__(cls, edges=None, patterns=None):
-        edges = edges if edges else {}
-        patterns = patterns if patterns else []
+        edges = edges or {}
+        patterns = patterns or []
         return tuple.__new__(cls, (edges, patterns))
 
     @property
@@ -174,10 +170,7 @@ class RewriteRule(object):
         if not isinstance(vars, tuple):
             raise TypeError("vars must be a tuple of variables")
         self.lhs = lhs
-        if callable(rhs):
-            self.subs = rhs
-        else:
-            self.subs = self._apply
+        self.subs = rhs if callable(rhs) else self._apply
         self.rhs = rhs
         self._varlist = [t for t in Traverser(lhs) if t in vars]
         # Reduce vars down to just variables found in lhs
@@ -268,11 +261,9 @@ class RuleSet(object):
             prev_node = curr_node
             if t in vars:
                 t = VAR
-            if t in curr_node.edges:
-                curr_node = curr_node.edges[t]
-            else:
+            if t not in curr_node.edges:
                 curr_node.edges[t] = Node()
-                curr_node = curr_node.edges[t]
+            curr_node = curr_node.edges[t]
         # We've reached a leaf node. Add the term index to this leaf.
         prev_node.edges[t].patterns.append(ind)
         self.rules.append(rule)
@@ -391,8 +382,7 @@ def _match(S, N):
                 continue
         except TypeError:
             pass
-        n = N.edges.get(VAR, None)
-        if n:
+        if n := N.edges.get(VAR, None):
             restore_state_flag = False
             matches = matches + (S.term,)
             S.skip()
@@ -424,7 +414,7 @@ def _process_match(rule, syms):
 
     subs = {}
     varlist = rule._varlist
-    if not len(varlist) == len(syms):
+    if len(varlist) != len(syms):
         raise RuntimeError("length of varlist doesn't match length of syms.")
     for v, s in zip(varlist, syms):
         if v in subs and subs[v] != s:

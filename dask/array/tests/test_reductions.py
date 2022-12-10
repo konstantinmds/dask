@@ -32,14 +32,14 @@ def test_numel(dtype, keepdims):
     )
 
     for length in range(x.ndim):
-        for sub in itertools.combinations([d for d in range(x.ndim)], length):
+        for sub in itertools.combinations(list(range(x.ndim)), length):
             assert_eq(
                 da.reductions.numel(x, axis=sub, keepdims=keepdims, dtype=dtype),
                 np.sum(x, axis=sub, keepdims=keepdims, dtype=dtype),
             )
 
     for length in range(x.ndim):
-        for sub in itertools.combinations([d for d in range(x.ndim)], length):
+        for sub in itertools.combinations(list(range(x.ndim)), length):
             ssub = np.random.shuffle(list(sub))
             assert_eq(
                 da.reductions.numel(x, axis=ssub, keepdims=keepdims, dtype=dtype),

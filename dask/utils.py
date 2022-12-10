@@ -25,10 +25,7 @@ if system_encoding == "ascii":
 
 
 def apply(func, args, kwargs=None):
-    if kwargs:
-        return func(*args, **kwargs)
-    else:
-        return func(*args)
+    return func(*args, **kwargs) if kwargs else func(*args)
 
 
 def deepmap(func, *seqs):
@@ -206,7 +203,7 @@ def filetexts(d, open=open, mode="t", use_tmpdir=True):
                 os.makedirs(os.path.dirname(filename))
             except OSError:
                 pass
-            f = open(filename, "w" + mode)
+            f = open(filename, f"w{mode}")
             try:
                 f.write(text)
             finally:
@@ -301,71 +298,67 @@ def is_integer(i):
     return isinstance(i, Integral) or (isinstance(i, float) and i.is_integer())
 
 
-ONE_ARITY_BUILTINS = set(
-    [
-        abs,
-        all,
-        any,
-        ascii,
-        bool,
-        bytearray,
-        bytes,
-        callable,
-        chr,
-        classmethod,
-        complex,
-        dict,
-        dir,
-        enumerate,
-        eval,
-        float,
-        format,
-        frozenset,
-        hash,
-        hex,
-        id,
-        int,
-        iter,
-        len,
-        list,
-        max,
-        min,
-        next,
-        oct,
-        open,
-        ord,
-        range,
-        repr,
-        reversed,
-        round,
-        set,
-        slice,
-        sorted,
-        staticmethod,
-        str,
-        sum,
-        tuple,
-        type,
-        vars,
-        zip,
-        memoryview,
-    ]
-)
-MULTI_ARITY_BUILTINS = set(
-    [
-        compile,
-        delattr,
-        divmod,
-        filter,
-        getattr,
-        hasattr,
-        isinstance,
-        issubclass,
-        map,
-        pow,
-        setattr,
-    ]
-)
+ONE_ARITY_BUILTINS = {
+    abs,
+    all,
+    any,
+    ascii,
+    bool,
+    bytearray,
+    bytes,
+    callable,
+    chr,
+    classmethod,
+    complex,
+    dict,
+    dir,
+    enumerate,
+    eval,
+    float,
+    format,
+    frozenset,
+    hash,
+    hex,
+    id,
+    int,
+    iter,
+    len,
+    list,
+    max,
+    min,
+    next,
+    oct,
+    open,
+    ord,
+    range,
+    repr,
+    reversed,
+    round,
+    set,
+    slice,
+    sorted,
+    staticmethod,
+    str,
+    sum,
+    tuple,
+    type,
+    vars,
+    zip,
+    memoryview,
+}
+MULTI_ARITY_BUILTINS = {
+    compile,
+    delattr,
+    divmod,
+    filter,
+    getattr,
+    hasattr,
+    isinstance,
+    issubclass,
+    map,
+    pow,
+    setattr,
+}
 
 
 def getargspec(func):
@@ -510,7 +503,7 @@ class Dispatch(object):
             func = self.dispatch(object)
             return func.__doc__
         except TypeError:
-            return "Single Dispatch for %s" % self.__name__
+            return f"Single Dispatch for {self.__name__}"
 
 
 def ensure_not_exists(filename):
@@ -531,9 +524,9 @@ def _skip_doctest(line):
         return line
     elif ">>>" in stripped and "+SKIP" not in stripped:
         if "# doctest:" in line:
-            return line + ", +SKIP"
+            return f"{line}, +SKIP"
         else:
-            return line + "  # doctest: +SKIP"
+            return f"{line}  # doctest: +SKIP"
     else:
         return line
 
@@ -555,7 +548,7 @@ def extra_titles(doc):
     seen = set()
     for i, title in sorted(titles.items()):
         if title in seen:
-            new_title = "Extra " + title
+            new_title = f"Extra {title}"
             lines[i] = lines[i].replace(title, new_title)
             lines[i + 1] = lines[i + 1].replace("-" * len(title), "-" * len(new_title))
         else:
@@ -576,20 +569,17 @@ def ignore_warning(doc, cls, name, extra=""):
         )
     else:
         l1 = "This docstring was copied from %s.%s. \n\n" % (cls.__name__, name)
-    l2 = "Some inconsistencies with the Dask version may exist."
-
     i = doc.find("\n\n")
     if i != -1:
         # Insert our warning
         head = doc[: i + 2]
         tail = doc[i + 2 :]
         # Indentation of next line
-        indent = re.match(r"\s*", tail).group(0)
+        indent = re.match(r"\s*", tail)[0]
         # Insert the warning, indented, with a blank line before and after
-        if extra:
-            more = [indent, extra.rstrip("\n") + "\n\n"]
-        else:
-            more = []
+        more = [indent, extra.rstrip("\n") + "\n\n"] if extra else []
+        l2 = "Some inconsistencies with the Dask version may exist."
+
         bits = [head, indent, l1, indent, l2, "\n\n"] + more + [tail]
         doc = "".join(bits)
 
@@ -607,7 +597,7 @@ def unsupported_arguments(doc, args):
         ]
         if len(subset) == 1:
             [(i, line)] = subset
-            lines[i] = line + "  (Not supported in Dask)"
+            lines[i] = f"{line}  (Not supported in Dask)"
     return "\n".join(lines)
 
 
@@ -635,7 +625,7 @@ def _derived_from(cls, method, ua_args=[], extra=""):
         not_supported = []
     if len(ua_args) > 0:
         not_supported.extend(ua_args)
-    if len(not_supported) > 0:
+    if not_supported:
         doc = unsupported_arguments(doc, not_supported)
 
     doc = skip_doctest(doc)
@@ -700,21 +690,19 @@ def funcname(func):
     type_name = getattr(type(func), "__name__", None) or ""
 
     # toolz.curry
-    if "toolz" in module_name and "curry" == type_name:
+    if "toolz" in module_name and type_name == "curry":
         return func.func_name[:50]
     # multipledispatch objects
-    if "multipledispatch" in module_name and "Dispatcher" == type_name:
+    if "multipledispatch" in module_name and type_name == "Dispatcher":
         return func.name[:50]
     # numpy.vectorize objects
-    if "numpy" in module_name and "vectorize" == type_name:
-        return ("vectorize_" + funcname(func.pyfunc))[:50]
+    if "numpy" in module_name and type_name == "vectorize":
+        return f"vectorize_{funcname(func.pyfunc)}"[:50]
 
     # All other callables
     try:
         name = func.__name__
-        if name == "<lambda>":
-            return "lambda"
-        return name[:50]
+        return "lambda" if name == "<lambda>" else name[:50]
     except AttributeError:
         return str(func)[:50]
 
@@ -735,7 +723,7 @@ def typename(typ):
     if not typ.__module__ or typ.__module__ == "builtins":
         return typ.__name__
     else:
-        return typ.__module__ + "." + typ.__name__
+        return f"{typ.__module__}.{typ.__name__}"
 
 
 def ensure_bytes(s):
@@ -839,7 +827,7 @@ def asciitable(columns, rows):
     widths = tuple(max(max(map(len, x)), len(c)) for x, c in zip(zip(*rows), columns))
     row_template = ("|" + (" %%-%ds |" * len(columns))) % widths
     header = row_template % tuple(columns)
-    bar = "+%s+" % "+".join("-" * (w + 2) for w in widths)
+    bar = f'+{"+".join("-" * (w + 2) for w in widths)}+'
     data = "\n".join(row_template % r for r in rows)
     return "\n".join([bar, header, bar, data, bar])
 
@@ -879,7 +867,7 @@ class methodcaller(object):
         return (methodcaller, (self.method,))
 
     def __str__(self):
-        return "<%s: %s>" % (self.__class__.__name__, self.method)
+        return f"<{self.__class__.__name__}: {self.method}>"
 
     __repr__ = __str__
 
@@ -984,7 +972,7 @@ class SerializableLock(object):
         self.__init__(token)
 
     def __str__(self):
-        return "<%s: %s>" % (self.__class__.__name__, self.token)
+        return f"<{self.__class__.__name__}: {self.token}>"
 
     __repr__ = __str__
 
@@ -1009,7 +997,7 @@ def ensure_dict(d):
     elif hasattr(d, "dicts"):
         result = {}
         for dd in d.dicts.values():
-            result.update(dd)
+            result |= dd
         return result
     return dict(d)
 
@@ -1189,7 +1177,7 @@ def parse_bytes(s):
         return int(s)
     s = s.replace(" ", "")
     if not s[0].isdigit():
-        s = "1" + s
+        s = f"1{s}"
 
     for i in range(len(s) - 1, -1, -1):
         if not s[i].isalpha():
@@ -1202,12 +1190,12 @@ def parse_bytes(s):
     try:
         n = float(prefix)
     except ValueError:
-        raise ValueError("Could not interpret '%s' as a number" % prefix)
+        raise ValueError(f"Could not interpret '{prefix}' as a number")
 
     try:
         multiplier = byte_sizes[suffix.lower()]
     except KeyError:
-        raise ValueError("Could not interpret '%s' as a byte unit" % suffix)
+        raise ValueError(f"Could not interpret '{suffix}' as a byte unit")
 
     result = n * multiplier
     return int(result)
@@ -1228,8 +1216,8 @@ byte_sizes = {
     "": 1,
 }
 byte_sizes = {k.lower(): v for k, v in byte_sizes.items()}
-byte_sizes.update({k[0]: v for k, v in byte_sizes.items() if k and "i" not in k})
-byte_sizes.update({k[:-1]: v for k, v in byte_sizes.items() if k and "i" in k})
+byte_sizes |= {k[0]: v for k, v in byte_sizes.items() if k and "i" not in k}
+byte_sizes |= {k[:-1]: v for k, v in byte_sizes.items() if k and "i" in k}
 
 
 def format_time(n):
@@ -1246,9 +1234,7 @@ def format_time(n):
     """
     if n >= 1:
         return "%.2f s" % n
-    if n >= 1e-3:
-        return "%.2f ms" % (n * 1e3)
-    return "%.2f us" % (n * 1e6)
+    return "%.2f ms" % (n * 1e3) if n >= 1e-3 else "%.2f us" % (n * 1e6)
 
 
 def format_bytes(n):
@@ -1275,20 +1261,8 @@ def format_bytes(n):
         return "%0.2f GB" % (n / 1e9)
     if n > 1e6:
         return "%0.2f MB" % (n / 1e6)
-    if n > 1e3:
-        return "%0.2f kB" % (n / 1000)
-    return "%d B" % n
+    return "%0.2f kB" % (n / 1000) if n > 1e3 else "%d B" % n
 
-
-timedelta_sizes = {
-    "s": 1,
-    "ms": 1e-3,
-    "us": 1e-6,
-    "ns": 1e-9,
-    "m": 60,
-    "h": 3600,
-    "d": 3600 * 24,
-}
 
 tds2 = {
     "second": 1,
@@ -1299,9 +1273,17 @@ tds2 = {
     "microsecond": 1e-6,
     "nanosecond": 1e-9,
 }
-tds2.update({k + "s": v for k, v in tds2.items()})
-timedelta_sizes.update(tds2)
-timedelta_sizes.update({k.upper(): v for k, v in timedelta_sizes.items()})
+tds2 |= {f"{k}s": v for k, v in tds2.items()}
+timedelta_sizes = {
+    "s": 1,
+    "ms": 1e-3,
+    "us": 1e-6,
+    "ns": 1e-9,
+    "m": 60,
+    "h": 3600,
+    "d": 3600 * 24,
+} | tds2
+timedelta_sizes |= {k.upper(): v for k, v in timedelta_sizes.items()}
 
 
 def parse_timedelta(s, default="seconds"):
@@ -1327,7 +1309,7 @@ def parse_timedelta(s, default="seconds"):
         s = str(s)
     s = s.replace(" ", "")
     if not s[0].isdigit():
-        s = "1" + s
+        s = f"1{s}"
 
     for i in range(len(s) - 1, -1, -1):
         if not s[i].isalpha():
